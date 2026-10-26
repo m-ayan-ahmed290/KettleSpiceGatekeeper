@@ -1,0 +1,30 @@
+[Unit]
+Description=Kettle Tea Garden Discord Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ktg-bot
+WorkingDirectory=/opt/ktg-bot
+EnvironmentFile=/opt/ktg-bot/.env
+ExecStart=/usr/bin/node --max-old-space-size=256 /opt/ktg-bot/index.js
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=15
+CPUQuota=35%
+MemoryHigh=450M
+MemoryMax=512M
+MemorySwapMax=0
+TasksMax=32
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+StandardOutput=journal
+StandardError=journal
+LogRateLimitIntervalSec=30s
+LogRateLimitBurst=100
+
+[Install]
+WantedBy=multi-user.target

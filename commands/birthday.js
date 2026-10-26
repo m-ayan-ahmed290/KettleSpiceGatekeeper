@@ -27,20 +27,24 @@ module.exports = {
       opt
         .setName("date")
         .setDescription('Your birth date (YYYY-MM-DD). Type "0" to remove your birthday.')
-        .setRequired(true)
+        .setRequired(false)
     )
-    .addIntegerOption((opt) =>
+    .addNumberOption((opt) =>
       opt
         .setName("timezone")
         .setDescription("Your UTC timezone offset (e.g. -5, 0, 5).")
-        .setRequired(true)
+        .setRequired(false)
         .setMinValue(-12)
         .setMaxValue(14)
     ),
 
   async execute(interaction) {
-    const dateInput = interaction.options.getString("date").trim();
-    const timezone = interaction.options.getInteger("timezone");
+    const dateInput = interaction.options.getString("date")?.trim();
+    if (!dateInput) {
+      const saved = await Birthday.findOne({ UserID: interaction.user.id }).lean();
+      return interaction.reply({ content: saved ? `Your birthday is ${new Date(saved.Date).toISOString().slice(0, 10)} (UTC${saved.Timezone >= 0 ? "+" : ""}${saved.Timezone}).` : "You have no birthday set. Use /birthday date:YYYY-MM-DD timezone:0.", ephemeral: true });
+    }
+    const timezone = interaction.options.getNumber("timezone") ?? 0;
     const user = interaction.user;
 
     try {
@@ -133,33 +137,8 @@ module.exports = {
         ephemeral: true,
       });
 
-      // ── If birthday is today, wish them now ───────────────────────────────
-      const isBirthdayToday =
-        now.getUTCMonth() === birthDate.getUTCMonth() &&
-        now.getUTCDate()  === birthDate.getUTCDate();
-
-      if (isBirthdayToday) {
-        const channelId = hasRole ? vipBDCh : plebBDCh;
-        const channel = interaction.guild.channels.cache.get(channelId);
-        if (channel) {
-          const embed = new MessageEmbed()
-            .setTitle("🎉 Happy Birthday!")
-            .setDescription(
-              `The mod team wishes you a very warm birthday! 🎂\n` +
-              `We hope everything goes well from today onwards.\n` +
-              `On this day, you are **${age} years old**!`
-            )
-            .setThumbnail(user.displayAvatarURL({ dynamic: true }))
-            .setColor("DARK_GREEN")
-            .setFooter({
-              text: "Kettle's Tea Garden",
-              iconURL: interaction.guild.iconURL({ dynamic: true }),
-            })
-            .setTimestamp();
-
-          await channel.send({ content: `<@${user.id}>`, embeds: [embed] });
-        }
-      }
+      const saved = await Birthday.findOne({ UserID: user.id }).lean();
+      await require("../events/ready").processBirthday(interaction.client, saved);
     } catch (error) {
       console.error("[Birthday Command] Error:", error);
       const errPayload = {

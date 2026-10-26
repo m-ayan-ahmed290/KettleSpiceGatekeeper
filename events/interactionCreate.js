@@ -2,6 +2,8 @@
  * interactionCreate.js — Handles slash command dispatching and logs executions.
  */
 
+const { enterCommand } = require("../utilities/commandGuard");
+const { runCommand } = require("../utilities/runCommand");
 const { MessageEmbed } = require("discord.js");
 const chalk = require("chalk");
 const { modChId } = require("../config.json");
@@ -27,17 +29,20 @@ module.exports = {
       subcommandOptions = optionsData[0].options ?? [];
     }
 
-    // Fetch the log channel once before executing the command
-    let logChannel = null;
-    try {
-      logChannel = await interaction.client.channels.fetch(modChId);
-    } catch (e) {
-      console.warn(chalk.yellow("[InteractionCreate] Could not fetch log channel:"), e.message);
+    if (!interaction.guild) {
+      return interaction.reply({ content: "Use this command in a server.", ephemeral: true });
     }
+    const required = command.data.toJSON().default_member_permissions;
+    if (required && !interaction.memberPermissions?.has(BigInt(required))) {
+      return interaction.reply({ content: "You don't have permission to use this command.", ephemeral: true });
+    }
+
+    const slot = enterCommand(interaction.user.id);
+    if (slot.error) return interaction.reply({ content: slot.error, ephemeral: true });
 
     // Execute the command
     try {
-      await command.execute(interaction);
+      await runCommand(command, interaction);
     } catch (error) {
       console.error(chalk.red.bold("[InteractionCreate] Command error:"), error);
 
@@ -56,7 +61,9 @@ module.exports = {
         console.error(chalk.red("[InteractionCreate] Failed to send error reply:"), replyErr);
       }
       return; // Don't log failed commands
-    }
+    } finally { slot.release(); }
+
+    if (interaction.commandName === "remind") return;
 
     // Log successful command execution
     console.log(
@@ -68,6 +75,7 @@ module.exports = {
       chalk.gray(`(${interaction.guild?.name ?? "DM"})`)
     );
 
+    const logChannel = await interaction.client.channels.fetch(modChId).catch(() => null);
     if (!logChannel) return;
 
     // Build log embed
@@ -82,7 +90,7 @@ module.exports = {
         name: "📝 Options",
         value: optList
           .map((o) => `> **${o.name}:** ${o.value ?? "*(none)*"}`)
-          .join("\n"),
+          .join("\n").slice(0, 1024),
       });
     }
 

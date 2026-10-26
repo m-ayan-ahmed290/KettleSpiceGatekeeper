@@ -1,11 +1,16 @@
 {
   "name": "ktg-bot",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Kettle's Tea Garden Discord Bot",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js"
+    "start": "node --max-old-space-size=256 index.js",
+    "dev": "nodemon index.js",
+    "test": "node scripts/test.js",
+    "check": "node scripts/check.js",
+    "benchmark": "node --max-old-space-size=256 scripts/benchmark.js",
+    "package": "node scripts/package.js",
+    "preflight": "node scripts/preflight.js"
   },
   "author": "",
   "license": "ISC",
@@ -18,9 +23,13 @@
     "moment": "^2.29.4",
     "moment-duration-format": "^2.3.2",
     "mongoose": "^8.0.0",
-    "node-fetch": "^2.7.0"
+    "node-fetch": "^2.7.0",
+    "@discordjs/builders": "^0.16.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.0"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

@@ -50,10 +50,9 @@ module.exports = {
     if (player2.bot || player1.id === player2.id) {
       return interaction.reply({ content: "❌ Invalid opponent.", ephemeral: true });
     }
+    if (activeGames.size >= 40) return interaction.reply({ content: "All game slots are busy. Try again shortly.", ephemeral: true });
     if (
-      activeGames.has(player1.id) || activeGames.has(player2.id) ||
-      [...activeGames.values()].includes(player1.id) ||
-      [...activeGames.values()].includes(player2.id)
+      activeGames.has(player1.id) || activeGames.has(player2.id)
     ) {
       return interaction.reply({
         content: "⚠️ One of you is already in a game. Finish it first!",
@@ -82,19 +81,6 @@ module.exports = {
       return;
     }
 
-    // Countdown updater
-    let timeLeft = 60;
-    const countdown = setInterval(async () => {
-      timeLeft -= 10;
-      if (timeLeft <= 0) { clearInterval(countdown); return; }
-      try {
-        await challengeMsg.edit({
-          content: `${player2}, you've been challenged to Tic Tac Toe by ${player1}! You have **${timeLeft} seconds** to accept.`,
-          components: [acceptRow],
-        });
-      } catch { clearInterval(countdown); }
-    }, 10_000);
-
     const challengeCollector = challengeMsg.createMessageComponentCollector({
       filter: (i) => i.customId === "accept_ttt" && i.user.id === player2.id,
       time: 60_000,
@@ -102,7 +88,7 @@ module.exports = {
     });
 
     challengeCollector.on("end", async (collected) => {
-      clearInterval(countdown);
+
 
       if (collected.size === 0) {
         activeGames.delete(player1.id);
@@ -112,6 +98,8 @@ module.exports = {
         } catch {}
         return;
       }
+
+      await collected.first().deferUpdate().catch(() => {});
 
       // ── Game phase ──────────────────────────────────────────────────────
       const board   = Array.from({ length: 3 }, () => Array(3).fill(null));
@@ -151,6 +139,7 @@ module.exports = {
       });
 
       gameCollector.on("collect", async (i) => {
+        if (gameOver) return i.deferUpdate();
         if (i.user.id !== current.id) {
           return i.reply({ content: "⏳ It's not your turn!", ephemeral: true });
         }
@@ -164,13 +153,15 @@ module.exports = {
         if (checkWinner(board)) {
           gameOver = true;
           gameCollector.stop("winner");
+          cleanup();
+          await i.deferUpdate().catch(() => {});
 
           const loser       = current.id === player1.id ? player2 : player1;
           const winDelta    = await updateStats(current, interaction.guild, "win", moves);
           const loseDelta   = await updateStats(loser,   interaction.guild, "lose");
 
           try {
-            await i.update({
+            await (i.deferred ? i.editReply.bind(i) : i.update.bind(i))({
               content:
                 `🎉 **${current.username}** (${symbols[current.id]}) wins after ${moves} moves!\n` +
                 `<@${current.id}>: **+${winDelta}** pts | <@${loser.id}>: **${loseDelta}** pts`,
@@ -185,12 +176,14 @@ module.exports = {
         if (isDraw) {
           gameOver = true;
           gameCollector.stop("draw");
+          cleanup();
+          await i.deferUpdate().catch(() => {});
 
           const d1 = await updateStats(player1, interaction.guild, "draw");
           const d2 = await updateStats(player2, interaction.guild, "draw");
 
           try {
-            await i.update({
+            await (i.deferred ? i.editReply.bind(i) : i.update.bind(i))({
               content:
                 `🤝 It's a draw!\n` +
                 `<@${player1.id}>: **${d1}** pts | <@${player2.id}>: **${d2}** pts`,
@@ -204,7 +197,7 @@ module.exports = {
         // Switch turn
         current = current.id === player1.id ? player2 : player1;
         try {
-          await i.update({ content: turnText(), components: renderBoard() });
+          await (i.deferred ? i.editReply.bind(i) : i.update.bind(i))({ content: turnText(), components: renderBoard() });
         } catch {}
       });
 
@@ -244,7 +237,9 @@ function checkWinner(b) {
 
 async function updateStats(user, guild, result, moves = 0) {
   const query   = { UserID: user.id, GuildID: guild.id };
-  let profile   = await Profile.findOne(query);
+  let profile;
+  try { profile = await Profile.findOne(query); }
+  catch (error) { console.error("[Game] Could not load stats:", error); return 0; }
 
   if (!profile) {
     profile = new Profile({
@@ -273,6 +268,7 @@ async function updateStats(user, guild, result, moves = 0) {
     profile.Points = Math.max(0, profile.Points + delta);
   }
 
-  await profile.save();
+  try { await profile.save(); }
+  catch (error) { console.error("[Game] Could not save stats:", error); return 0; }
   return delta;
 }

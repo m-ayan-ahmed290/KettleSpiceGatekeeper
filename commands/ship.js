@@ -43,10 +43,10 @@ module.exports = {
     .setName("ship")
     .setDescription("Check compatibility between two people.")
     .addStringOption((o) =>
-      o.setName("person1").setDescription("First person (username or @mention)").setRequired(false)
+      o.setName("person1").setDescription("First person (username or @mention)").setMaxLength(80).setRequired(false)
     )
     .addStringOption((o) =>
-      o.setName("person2").setDescription("Second person (username or @mention)").setRequired(false)
+      o.setName("person2").setDescription("Second person (username or @mention)").setMaxLength(80).setRequired(false)
     ),
 
   async execute(interaction) {
@@ -101,7 +101,11 @@ module.exports = {
     // No arguments → ship invoker with a random member
     if (options.data.length === 0) {
       const nonBots = guild.members.cache.filter((m) => !m.user.bot);
-      const random  = nonBots.random();
+      const random = nonBots.filter(m => m.id !== user.id).random();
+      if (!random) {
+        await interaction.reply({ content: "Please specify two people to ship.", ephemeral: true });
+        return null;
+      }
       return {
         person1: member?.displayName ?? user.username,
         person2: random.displayName ?? random.user.username,

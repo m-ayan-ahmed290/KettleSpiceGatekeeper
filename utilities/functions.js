@@ -28,19 +28,21 @@ async function getLogChannel() {
 /**
  * Assigns missing tier auto-roles to every member in guildId2.
  */
+let roleSync = null;
 function assignRolesToAllMembers() {
-  const guild = client.guilds.cache.get(guildId2);
-  if (!guild) {
-    console.warn("[Functions] assignRolesToAllMembers: guild not found.");
-    return;
-  }
-
-  guild.members
-    .fetch()
-    .then((members) =>
-      Promise.all(members.map((member) => assignRolesToMember(member)))
-    )
-    .catch((err) => console.error("[Functions] Error fetching members:", err));
+  if (roleSync) return roleSync;
+  roleSync = (async () => {
+    const guild = client.guilds.cache.get(guildId2);
+    if (!guild) return;
+    let after;
+    while (true) {
+      const members = await guild.members.list({ limit: 100, after, cache: false });
+      for (const member of members.values()) await assignRolesToMember(member);
+      if (members.size < 100) break;
+      after = members.last().id;
+    }
+  })().finally(() => { roleSync = null; });
+  return roleSync;
 }
 
 /**
@@ -95,9 +97,7 @@ async function removeAllRolesFromMembers() {
   const tier2Role = findRole(guild, TRoles.TR2);
   const tier3Role = findRole(guild, TRoles.TR3);
 
-  const members = await guild.members.fetch();
-
-  for (const member of members.values()) {
+  for await (const member of paginatedMembers(guild)) {
     try {
       if (tier1Role && member.roles.cache.has(tier1Role.id))
         await member.roles.remove(tier1Role);
@@ -169,5 +169,15 @@ async function assignOrRemoveRole(member, role, action) {
       console.error(`[Functions] Error removing "${role.name}" from ${member.user.tag}:`, err);
     }
     await delay(ROLE_ACTION_DELAY_MS);
+  }
+}
+
+async function* paginatedMembers(guild) {
+  let after;
+  while (true) {
+    const page = await guild.members.list({ limit: 100, after, cache: false });
+    yield* page.values();
+    if (page.size < 100) return;
+    after = page.last().id;
   }
 }

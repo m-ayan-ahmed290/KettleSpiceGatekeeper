@@ -3,6 +3,7 @@
  * audit log listener, command registration.
  */
 
+const { birthdayToday, birthdayKey, age: birthdayAge } = require("../utilities/birthdayDates");
 const fs = require("fs");
 const path = require("path");
 const mongoose = require("mongoose");
@@ -26,7 +27,7 @@ const ALLOWED_ROLES = [
 ];
 
 const BIRTHDAY_CHANNEL_ID = "1105487618189295686"; // General log/announcement channel
-const BIRTHDAY_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const BIRTHDAY_CHECK_INTERVAL_MS = 15 * 60 * 1000; // Check every 15 minutes for timezone boundaries
 
 module.exports = {
   name: "ready",
@@ -34,8 +35,9 @@ module.exports = {
 
   async execute(client) {
     try {
-      await connectToDatabase();
+      await connectToDatabase().catch(error => console.error("[Database]", error.message));
       await initializeBot(client);
+      require("../utilities/reminders").startReminders(client);
       await setupBirthdaySystem(client);
       // await sendToRestrictChannel(client);
       auditLogCheck.execute(); // Start audit log polling
@@ -48,11 +50,11 @@ module.exports = {
 // ─── Database ─────────────────────────────────────────────────────────────────
 
 async function connectToDatabase() {
-  if (!mongoURL) {
+  if (!process.env.MONGODB_URI && !mongoURL) {
     console.warn("[Ready] mongoURL not set — skipping database connection.");
     return;
   }
-  await mongoose.connect(mongoURL);
+  await mongoose.connect(process.env.MONGODB_URI || mongoURL, { maxPoolSize: 3, minPoolSize: 0, serverSelectionTimeoutMS: 10_000, socketTimeoutMS: 20_000 });
   console.log(
     chalk.bgMagenta.white.bold(" 🗄️   ") +
       chalk.magentaBright("Connected to MongoDB!"),
@@ -76,7 +78,7 @@ async function initializeBot(client) {
   );
 
   // Sync roles for all members
-  await assignRolesToAllMembers();
+  assignRolesToAllMembers().catch(error => console.error("[RoleSync]", error));
 
   // Register slash commands
   await registerCommands(client);
@@ -120,7 +122,7 @@ async function setupBirthdaySystem(client) {
   setInterval(
     () => checkAndSendBirthdayMessages(client),
     BIRTHDAY_CHECK_INTERVAL_MS,
-  );
+  ).unref();
 
   console.log(
     chalk.bgYellow.black.bold(" 🥳  ") +
@@ -128,36 +130,24 @@ async function setupBirthdaySystem(client) {
   );
 }
 
+let jobRunning = false;
 async function checkAndSendBirthdayMessages(client) {
+  if (jobRunning) return;
+  jobRunning = true;
   try {
-    const birthdays = await Birthday.find().lean();
-    if (!birthdays.length) return;
-
-    const results = await Promise.allSettled(
-      birthdays.map((b) => processBirthday(client, b)),
-    );
-
-    results.forEach((r, i) => {
-      if (r.status === "rejected") {
-        console.error(
-          `[Birthday] Failed for user ${birthdays[i].UserID}:`,
-          r.reason,
-        );
-      }
-    });
-
-    const ok = results.filter((r) => r.status === "fulfilled").length;
-    console.log(
-      chalk.bgYellow.black.bold(" 🎂  ") +
-        chalk.yellowBright(`Processed ${ok}/${birthdays.length} birthdays.`),
-    );
+    const cursor = Birthday.find().lean().cursor({ batchSize: 50 });
+    for await (const birthday of cursor) {
+      await processBirthday(client, birthday).catch(error => console.error("[Birthday]", error));
+    }
   } catch (err) {
     console.error("[Birthday] Error during birthday check:", err);
-  }
+  } finally { jobRunning = false; }
 }
 
 async function processBirthday(client, birthday) {
-  if (!isBirthdayInTimezone(birthday.Date, birthday.Timezone ?? 0)) return;
+  if (!birthdayToday(birthday.Date, birthday.Timezone ?? 0)) return;
+  const key = birthdayKey(birthday.Timezone ?? 0);
+  if (birthday.LastWished === key) return;
 
   const guild = client.guilds.cache.get(birthday.GuildID ?? guildId);
   if (!guild) throw new Error(`Guild not found: ${birthday.GuildID}`);
@@ -185,40 +175,21 @@ async function processBirthday(client, birthday) {
   const channel = guild.channels.cache.get(channelId);
   if (!channel) throw new Error(`Birthday channel not found: ${channelId}`);
 
-  const age = calculateAge(birthday.Date);
+  const age = birthdayAge(birthday.Date, birthday.Timezone ?? 0);
   const embed = buildBirthdayEmbed(user, guild, age);
 
-  await channel.send({ content: `<@${birthday.UserID}>`, embeds: [embed] });
+  const claimed = await Birthday.findOneAndUpdate(
+    { _id: birthday._id, LastWished: { $ne: key } }, { $set: { LastWished: key } }, { new: true });
+  if (!claimed) return;
+  try {
+    await channel.send({ content: `<@${birthday.UserID}>`, embeds: [embed] });
+  } catch (error) {
+    await Birthday.updateOne({ _id: birthday._id, LastWished: key }, { $set: { LastWished: birthday.LastWished || "" } });
+    throw error;
+  }
   console.log(
     `[Birthday] Sent birthday message for ${user.username} (age ${age})`,
   );
-}
-
-// ─── Date helpers ─────────────────────────────────────────────────────────────
-
-function getTodayInTimezone(offset) {
-  const now = new Date();
-  const utc = now.getTime() + now.getTimezoneOffset() * 60_000;
-  const local = new Date(utc + offset * 3_600_000);
-  local.setHours(0, 0, 0, 0);
-  return local;
-}
-
-function isBirthdayInTimezone(birthDateString, offset) {
-  const today = getTodayInTimezone(offset);
-  const birth = new Date(birthDateString);
-  return (
-    today.getMonth() === birth.getMonth() && today.getDate() === birth.getDate()
-  );
-}
-
-function calculateAge(birthDateString) {
-  const today = new Date();
-  const birth = new Date(birthDateString);
-  let age = today.getUTCFullYear() - birth.getUTCFullYear();
-  const m = today.getUTCMonth() - birth.getUTCMonth();
-  if (m < 0 || (m === 0 && today.getUTCDate() < birth.getUTCDate())) age--;
-  return age;
 }
 
 // ─── Embed builders ───────────────────────────────────────────────────────────
@@ -268,3 +239,5 @@ async function sendToRestrictChannel(client) {
     );
   }
 }
+
+module.exports.processBirthday = processBirthday;

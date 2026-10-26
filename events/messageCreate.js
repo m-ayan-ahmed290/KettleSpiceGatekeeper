@@ -23,17 +23,20 @@ const {
 const client = require("../utilities/client");
 const { cacheMessageAttachments } = require("../utilities/attachmentCache");
 const { awardCredits } = require("../utilities/awardCredits");
+const { containsBlockedWord } = require("../utilities/blockedWords");
 const CommissionOffender = require("../schemas/commissionOffender");
 
 // ─── Commission-spam detection config ─────────────────────────────────────────
 
 /** Leave empty to monitor ALL channels, or add channel ID strings to restrict. */
 const MONITORED_CHANNEL_IDS = new Set([]);
+const cleanupJobs = new Set();
 
 /** Role IDs exempt from the filter (mods, trusted artists, etc.). */
 const EXEMPT_ROLE_IDS = new Set([]);
 
 const PRIMARY_KEYWORDS = ["commission", "comms", "comm", "logo", "live2d"];
+const PRIMARY_PATTERNS = Object.fromEntries(PRIMARY_KEYWORDS.map(kw => [kw, new RegExp(`\\b${kw}(?:s)?\\b`, "i")]));
 const SECONDARY_KEYWORDS = [
   "pricing",
   "price",
@@ -113,8 +116,8 @@ module.exports = {
     // Get mod channel early for alerts
     const modChannel = client.channels.cache.get(modChId);
 
-    // 1. Always pre-cache attachments — runs for every guild
-    if (message.attachments.size > 0) {
+    // 1. Cache media only for guilds with a configured deletion log
+    if (message.attachments.size > 0 && require("../data/log-channel.json").log_channel[message.guild.id]) {
       cacheMessageAttachments(message).catch((err) =>
         console.error("[MessageCreate] Attachment pre-cache error:", err),
       );
@@ -128,22 +131,32 @@ module.exports = {
     )
       return;
 
+    const lower = message.content.toLowerCase();
+    const isSpam = isCommissionSpam(lower);
+    if (message.channel.id !== restrictedChId && await containsBlockedWord(lower)) {
+      await message.delete().catch(error => console.warn("[BlockWords]", error.message));
+      return;
+    }
+    if (!isSpam && message.channel.id !== restrictedChId) return;
     let member;
     try {
-      member = await message.guild.members.fetch(message.author.id);
+      member = message.member ?? await message.guild.members.fetch(message.author.id);
     } catch {
       return;
     }
 
     if (member.roles.cache.some((r) => EXEMPT_ROLE_IDS.has(r.id))) return;
 
-    const lower = message.content.toLowerCase();
-    const isSpam = isCommissionSpam(lower);
-
     // ─── Restricted channel check (independent of spam detection) ───────────
     if (message.channel.id === restrictedChId) {
+      const cleanupKey = `${message.guild.id}:${message.author.id}`;
+      let acquired = false;
       try {
         await message.delete();
+        await member.timeout(TIMEOUT_DURATION_MS, "Auto: posted in restricted channel");
+        if (cleanupJobs.has(cleanupKey) || cleanupJobs.size >= 2) return;
+        cleanupJobs.add(cleanupKey);
+        acquired = true;
 
         // Delete all messages from this user in the past hour across all channels
         const oneHourAgo = Date.now() - 60 * 60 * 1000;
@@ -153,9 +166,10 @@ module.exports = {
             (ch) => ch.type === "GUILD_TEXT" && ch.viewable,
           );
 
-          // Process all channels in parallel for speed
-          const results = await Promise.all(
-            Array.from(textChannels.values()).map(async (channel) => {
+          // Process channels sequentially to bound requests and memory
+          const results = [];
+          for (const channel of textChannels.values()) {
+            results.push(await (async () => {
               try {
                 const recentMessages = await channel.messages.fetch({
                   limit: 100,
@@ -175,8 +189,8 @@ module.exports = {
               } catch (chErr) {
                 return 0;
               }
-            }),
-          );
+            })());
+          }
 
           const totalDeleted = results.reduce((a, b) => a + b, 0);
           console.log(
@@ -188,11 +202,6 @@ module.exports = {
             bulkErr,
           );
         }
-
-        await member.timeout(
-          TIMEOUT_DURATION_MS,
-          "Auto: posted in restricted channel",
-        );
 
         const embed = new MessageEmbed()
           .setColor("#FF6600")
@@ -216,12 +225,13 @@ module.exports = {
             iconURL: message.guild.iconURL({ dynamic: true }),
           })
           .setTimestamp();
-        await modChannel.send({ embeds: [embed] });
+        if (modChannel) await modChannel.send({ embeds: [embed] });
       } catch (error) {
         console.log(
           `Unable to timeout user <@${message.author.id}> (${message.author.username}). Error: ${error}`,
         );
       }
+      finally { if (acquired) cleanupJobs.delete(cleanupKey); }
       return; // Stop here - don't process further
     }
 
@@ -299,7 +309,7 @@ module.exports = {
           iconURL: message.guild.iconURL({ dynamic: true }),
         })
         .setTimestamp();
-      await modChannel.send({ embeds: [embed] });
+      if (modChannel) await modChannel.send({ embeds: [embed] });
     } catch (err) {
       console.error("[CommissionFilter] Failed to send mod alert:", err);
     }
@@ -307,7 +317,7 @@ module.exports = {
 };
 
 function isCommissionSpam(text) {
-  if (!PRIMARY_KEYWORDS.some((kw) => text.includes(kw))) return false;
+  if (!PRIMARY_KEYWORDS.some((kw) => PRIMARY_PATTERNS[kw].test(text))) return false;
   return (
     SECONDARY_KEYWORDS.filter((kw) => text.includes(kw)).length >=
     MIN_SECONDARY_MATCHES
@@ -415,6 +425,7 @@ async function handleCarlBotModLog(message) {
     username: resolved.username,
     credits: actionConfig.credits,
     reason: `${actionConfig.label} | ${parsed.caseNum ?? "?"}`,
+    sourceId: message.id,
   });
 }
 
@@ -450,5 +461,6 @@ async function handleTicketClose(message) {
     username,
     credits: TICKET_CLOSE_CREDITS,
     reason: `Ticket | ${ticketId ?? "?"}`,
+    sourceId: message.id,
   });
 }

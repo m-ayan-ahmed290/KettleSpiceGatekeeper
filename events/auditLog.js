@@ -1,5 +1,5 @@
 /**
- * auditLog.js — Polls Discord's audit log every 5 hours and awards
+ * auditLog.js — Polls Discord's audit log every 5 minutes and awards
  * moderator credits for timeouts only.
  *
  * Every other moderation action (ban, warn, kick, mute) is now
@@ -18,8 +18,8 @@ const chalk = require("chalk");
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-/** How often to poll the audit log (5 hours). */
-const CHECK_INTERVAL_MS = 5 * 60 * 60 * 1000;
+/** How often to poll the audit log (5 minutes). */
+const CHECK_INTERVAL_MS = 5 * 60 * 1000;
 
 /** Only process audit entries created within this window (8 hours). */
 const ENTRY_MAX_AGE_MS = 8 * 60 * 60 * 1000;
@@ -42,13 +42,17 @@ module.exports = {
         chalk.gray("Audit Log Check started (timeouts only)"),
     );
 
-    setInterval(() => runAuditCheck(), CHECK_INTERVAL_MS);
+    await runAuditCheck();
+    setInterval(() => runAuditCheck(), CHECK_INTERVAL_MS).unref();
   },
 };
 
 // ─── Core audit-check function ────────────────────────────────────────────────
 
+let jobRunning = false;
 async function runAuditCheck() {
+  if (jobRunning) return;
+  jobRunning = true;
   try {
     const guild = client.guilds.cache.get(guildId);
     if (!guild) throw new Error("Guild not found");
@@ -58,32 +62,34 @@ async function runAuditCheck() {
     );
   } catch (error) {
     console.error("[AuditLog] Error during audit check:", error);
-  }
+  } finally { jobRunning = false; }
 }
 
 async function processActionType(guild, type) {
-  const auditLogs = await guild.fetchAuditLogs({ limit: 20, type });
-
-  await Promise.all(
-    Array.from(auditLogs.entries.values()).map((entry) => processEntry(entry)),
-  );
+  let before;
+  for (let page = 0; page < 10; page++) {
+    const logs = await guild.fetchAuditLogs({ limit: 100, type, before });
+    for (const entry of logs.entries.values()) await processEntry(entry);
+    const last = logs.entries.last();
+    if (!last || logs.entries.size < 100 || Date.now() - last.createdTimestamp > ENTRY_MAX_AGE_MS) break;
+    before = last.id;
+  }
 }
 
 async function processEntry(entry) {
   const { executor, id, createdTimestamp, changes, target } = entry;
 
   // Ignore bot actions and stale entries
-  if (executor.bot || Date.now() - createdTimestamp > ENTRY_MAX_AGE_MS) return;
+  if (!executor || executor.bot || Date.now() - createdTimestamp > ENTRY_MAX_AGE_MS) return;
 
   // Skip already-processed entries (idempotency)
   if (await ProcessedLogId.exists({ logId: id })) return;
-  await new ProcessedLogId({ logId: id }).save();
 
   // Only credit actual timeouts (communication_disabled_until being set)
   const muteChange = changes?.find(
     (c) => c.key === "communication_disabled_until",
   );
-  if (!muteChange || muteChange.new === null) return;
+  if (!muteChange || !muteChange.new) return;
 
   const reason = `Timeout${target ? ` | ${target.username}` : ""}`;
 
@@ -92,5 +98,7 @@ async function processEntry(entry) {
     username: executor.username,
     credits: TIMEOUT_CREDITS,
     reason,
+    sourceId: id,
   });
+  await ProcessedLogId.updateOne({ logId: id }, { $setOnInsert: { logId: id } }, { upsert: true });
 }

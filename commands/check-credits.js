@@ -23,13 +23,13 @@ module.exports = {
     const user = interaction.options.getUser("moderator") ?? interaction.user;
 
     try {
-      const creditUser = await creditSchema.findOne({ UserID: user.id });
+      const creditUser = await creditSchema.findOne({ UserID: user.id }).slice("Action", -5).lean();
 
       if (!creditUser) {
         return interaction.reply({
           content:
             `${emoji.failure} **${user.username}** has no credit record yet.\n` +
-            `Credits are earned through bans, kicks, timeouts, and message deletions.`,
+            `Credits are earned through bans, warnings, kicks, timeouts, and closed tickets.`,
           ephemeral: true,
         });
       }
@@ -52,7 +52,7 @@ module.exports = {
       if (creditUser.Blocked) {
         embed.addFields(
           { name: "🚫 Blocked", value: "Yes", inline: true },
-          { name: "📝 Reason",  value: creditUser.Reason || "No reason given", inline: true }
+          { name: "📝 Reason",  value: (creditUser.Reason || "No reason given").slice(0, 1024), inline: true }
         );
       }
 
@@ -65,7 +65,7 @@ module.exports = {
         });
         embed.addFields({
           name: "📋 Recent Actions",
-          value: lines.join("\n"),
+          value: lines.join("\n").slice(0, 1024),
         });
       }
 

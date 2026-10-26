@@ -75,6 +75,7 @@ module.exports = {
   async handleCreditsLeaderboard(interaction, model, title, type) {
     const topUsers = await model
       .find()
+      .select("Username UserID Credits")
       .sort({ Credits: -1 })
       .limit(MAX_CREDITS)
       .lean();

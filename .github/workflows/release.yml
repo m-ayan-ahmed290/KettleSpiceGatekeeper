@@ -1,0 +1,43 @@
+name: Validate and build Wispbyte download
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run check
+      - run: npm test
+      - run: npm run benchmark
+      - run: npm run package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wispbyte-download
+          path: dist/*
+      - name: Publish tested download
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="v$(node -p 'require("./package.json").version')"
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            echo "Release $VERSION already exists; tested artifacts are available in this run."
+          else
+            gh release create "$VERSION" dist/* --target "$GITHUB_SHA" --title "KTG Bot $VERSION — Wispbyte build" --notes-file CHANGELOG.md
+          fi

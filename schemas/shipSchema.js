@@ -5,4 +5,7 @@ const shipSchema = new Schema({
   ShipStr: Number,
 });
 
+shipSchema.index({ ShipName: 1 });
+shipSchema.index({ ShipStr: -1 });
+
 module.exports = model(`ShipSchema`, shipSchema);

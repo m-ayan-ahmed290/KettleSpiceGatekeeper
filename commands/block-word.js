@@ -1,112 +1,35 @@
-const { SlashCommandBuilder } = require(`@discordjs/builders`);
-const blockWords = require(`../schemas/blockWordsSchema`);
-const {
-  MessageEmbed,
-  Permissions,
-  MessageButton,
-  MessageActionRow,
-} = require(`discord.js`);
-const { emoji } = require(`../data/emojis.json`);
-
+const { SlashCommandBuilder } = require("@discordjs/builders");
+const { Permissions } = require("discord.js");
+const BlockWords = require("../schemas/blockWordsSchema");
+const { invalidate } = require("../utilities/blockedWords");
 module.exports = {
-  data: new SlashCommandBuilder()
-    .setName(`block-words`)
-    .setDescription(`Add new words or remove existing words from blocklist.`)
-    .addSubcommand((subcommand) =>
-      subcommand
-        .setName(`add`)
-        .setDescription(`Add new words to blocklist.`)
-        .addStringOption((option) =>
-          option
-            .setName(`word`)
-            .setDescription(`The word to be blocked.`)
-            .setRequired(true)
-        )
-    )
-    .addSubcommand((subcommand) =>
-      subcommand
-        .setName(`remove`)
-        .setDescription(`Remove words from blocklist.`)
-        .addStringOption((option) =>
-          option
-            .setName(`word`)
-            .setDescription(`The word to be removed.`)
-            .setRequired(true)
-        )
-    )
-    .setDefaultMemberPermissions(Permissions.FLAGS.MANAGE_MESSAGES),
-
+  data: new SlashCommandBuilder().setName("block-words").setDescription("Manage the moderation word and phrase blocklist.")
+    .setDefaultMemberPermissions(Permissions.FLAGS.MANAGE_MESSAGES)
+    .addSubcommand(s => s.setName("add").setDescription("Block a word or phrase.")
+      .addStringOption(o => o.setName("word").setDescription("Word or phrase to block.").setRequired(true).setMaxLength(100)))
+    .addSubcommand(s => s.setName("remove").setDescription("Remove a word or phrase.")
+      .addStringOption(o => o.setName("word").setDescription("Word or phrase to remove.").setRequired(true).setMaxLength(100)))
+    .addSubcommand(s => s.setName("list").setDescription("List blocked words and phrases.")
+      .addIntegerOption(o => o.setName("page").setDescription("Page number (20 entries per page).").setMinValue(1).setMaxValue(500))),
   async execute(interaction) {
-    const subcommand = interaction.options.getSubcommand();
-
-    try {
-      if (subcommand === `add`) {
-        try {
-          const word = interaction.options.getString(`word`).toLowerCase();
-
-          const wordInDb = await blockWords.findOne({ BlockWord: word });
-          if (wordInDb) {
-            return await interaction.reply({
-              content: `${emoji.failure} This word is already blocked!`,
-              ephemeral: true,
-            });
-          } else {
-            await blockWords.create({ BlockWord: word });
-            return await interaction.reply({
-              content: `${emoji.success} Successfully blocked this word!`,
-            });
-          }
-        } catch (error) {
-          console.error(
-            `Encountered an error in block-word.js > add:\n`,
-            error
-          );
-          if (interaction.isReplied) {
-            await interaction.editReply({
-              content: `${emoji.failure} Encountered an error while saving the block word!\n \`\`\`js\n${error}\`\`\``,
-            });
-          } else {
-            await interaction.reply({
-              content: `${emoji.failure} Encountered an error while saving the block word!\n \`\`\`js\n${error}\`\`\``,
-            });
-          }
-        }
-      }
-
-      if (subcommand === `remove`) {
-        try {
-          const word = interaction.options.getString(`word`).toLowerCase();
-
-          const wordInDb = await blockWords.findOne({ BlockWord: word });
-          if (wordInDb) {
-            await blockWords.deleteOne({ BlockWord: word });
-            return await interaction.reply({
-              content: `${emoji.success} Successfully removed this word from blocklist!`,
-            });
-          } else {
-            return await interaction.reply({
-              content: `${emoji.failure} This word doesn't exist in blocklist!`,
-              ephemeral: true,
-            });
-          }
-        } catch (error) {
-          console.error(
-            `Encountered an error in block-word.js > remove:\n`,
-            error
-          );
-          if (interaction.isReplied) {
-            await interaction.editReply({
-              content: `${emoji.failure} Encountered an error while removing the blocked word!\n \`\`\`js\n${error}\`\`\``,
-            });
-          } else {
-            await interaction.reply({
-              content: `${emoji.failure} Encountered an error while removing the blocked word!\n \`\`\`js\n${error}\`\`\``,
-            });
-          }
-        }
-      }
-    } catch (error) {
-      console.error(`Encountered an error in block-word.js:\n`, error);
+    await interaction.deferReply({ ephemeral: true });
+    const sub = interaction.options.getSubcommand();
+    if (sub === "list") {
+      const page = interaction.options.getInteger("page") || 1;
+      const words = await BlockWords.find().select("BlockWord -_id").sort({ BlockWord: 1 }).skip((page - 1) * 20).limit(20).lean();
+      return interaction.editReply({ content: words.length ? `Blocked words — page ${page}\n` + words.map(w => w.BlockWord).join("\n").slice(0, 1800) : "No blocked words on this page.", allowedMentions: { parse: [] } });
     }
+    const word = interaction.options.getString("word").trim().toLowerCase();
+    if (!word) return interaction.editReply({ content: "Enter a nonempty word or phrase." });
+    let content;
+    if (sub === "add") {
+      if (await BlockWords.exists({ BlockWord: word })) content = "That word is already blocked.";
+      else { await BlockWords.create({ BlockWord: word }); content = "✅ Word or phrase blocked."; }
+    } else {
+      const result = await BlockWords.deleteOne({ BlockWord: word });
+      content = result.deletedCount ? "✅ Word or phrase removed." : "That word is not blocked.";
+    }
+    invalidate();
+    return interaction.editReply({ content });
   },
 };

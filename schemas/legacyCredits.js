@@ -28,6 +28,8 @@ const legacyCreditSchema = new Schema({
 
 // Explicit collection name so it doesn't collide with / get confused
 // with the live "creditschemas" collection used by schemas/credits.js.
+legacyCreditSchema.index({ Credits: -1 });
+
 module.exports = model(
   "legacyCreditSchema",
   legacyCreditSchema,

@@ -152,11 +152,14 @@ module.exports = {
       });
 
       collector.on("collect", async (i) => {
-        await Profile.findOneAndDelete(baseQuery);
-        await i.update({
-          content: "Your profile has been deleted.",
-          components: [],
-        });
+        try {
+          await i.deferUpdate();
+          await Profile.findOneAndDelete(baseQuery);
+          await i.editReply({ content: "Your profile has been deleted.", components: [] });
+        } catch (error) {
+          console.error("[Profile] Delete failed:", error);
+          await i.editReply({ content: "Could not delete your profile. Try again later.", components: [] }).catch(() => {});
+        }
       });
 
       collector.on("end", (collected) => {
@@ -164,7 +167,7 @@ module.exports = {
           interaction.editReply({
             content: "Profile deletion cancelled.",
             components: [],
-          });
+          }).catch(() => {});
         }
       });
     }

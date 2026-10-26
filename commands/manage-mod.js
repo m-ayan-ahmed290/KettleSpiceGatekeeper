@@ -50,6 +50,7 @@ module.exports = {
         .addIntegerOption((opt) =>
           opt
             .setName(`amount`)
+            .setMinValue(0)
             .setDescription(
               `The credits amount to set/increase/decrease a moderator's credits.`
             )
@@ -88,7 +89,7 @@ module.exports = {
     const subcommand = interaction.options.getSubcommand();
     const moderator = interaction.options.getUser(`moderator`);
     const modId = moderator.id;
-    const creditUser = await creditSchema.findOne({ UserID: modId });
+    const creditUser = await creditSchema.findOne({ UserID: modId }).select("UserID Credits Blocked").lean();
 
     if (!creditUser) {
       return interaction.reply({
@@ -168,12 +169,14 @@ module.exports = {
           Credit: `${opn}${amount}`,
         };
 
-        await creditSchema.updateOne(
-          { UserID: modId },
-          { $set: { Credits: updatedCredits } }
-        );
-        creditUser.Action.push(actReason);
-        await creditUser.save();
+        const query = { UserID: modId };
+        if (action === "decrease") query.Credits = { $gte: amount };
+        const change = action === "set" ? { $set: { Credits: amount } }
+          : { $inc: { Credits: action === "increase" ? amount : -amount } };
+        const updated = await creditSchema.findOneAndUpdate(query,
+          { ...change, $push: { Action: actReason } }, { new: true });
+        if (!updated) return interaction.reply({ content: "Cannot decrease credits below 0.", ephemeral: true });
+        updatedCredits = updated.Credits;
 
         return interaction.reply({
           content: `${emoji.success} Updated ${moderator.username}'s credits to ${updatedCredits}!`,

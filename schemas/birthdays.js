@@ -6,6 +6,7 @@ const BirthdaySchema = new Schema({
   GuildID: { type: String, required: true },
   Date: { type: Date, required: true },
   HasRole: { type: Boolean, required: true },
+  LastWished: { type: String, default: "" },
   Timezone: { type: Number, required: true }, // UTC offset, e.g. -5, 0, 5
 });
 

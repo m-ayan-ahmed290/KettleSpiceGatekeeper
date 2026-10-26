@@ -22,6 +22,8 @@
  *      and note the public URL — that becomes BOT_API_URL in Vercel.
  */
 
+const { timingSafeEqual } = require("crypto");
+const { resourceStats } = require("../utilities/resourceStats");
 const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
@@ -30,21 +32,23 @@ const creditSchema = require("../schemas/credits");
 const legacyCreditSchema = require("../schemas/legacyCredits");
 
 const SECRET = process.env.BOT_API_SECRET;
-const PORT = parseInt(process.env.BOT_API_PORT ?? "4000", 10);
-const GUILD_ID = process.env.GUILD_ID; // same as config.json guildId
+const PORT = parseInt(process.env.BOT_API_PORT || process.env.PORT || process.env.SERVER_PORT || "4000", 10);
+const GUILD_ID = process.env.GUILD_ID || require("../config.json").guildId; // same as config.json guildId
 
 // ─── Auth middleware ──────────────────────────────────────────────────────────
 
 function auth(req, res, next) {
-  if (!SECRET) return next(); // If no secret configured, skip (dev only)
-  if (req.headers["x-bot-secret"] !== SECRET)
+  if (!SECRET) return res.status(503).json({ error: "Dashboard API is disabled: set BOT_API_SECRET" });
+  const supplied = Buffer.from(req.headers["x-bot-secret"] || "");
+  const expected = Buffer.from(SECRET);
+  if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected))
     return res.status(401).json({ error: "Unauthorized" });
   next();
 }
 
 // ─── Main export ──────────────────────────────────────────────────────────────
 
-function startApiServer(client) {
+function createApiApp(client) {
   const app = express();
 
   app.use(
@@ -52,10 +56,16 @@ function startApiServer(client) {
       origin: process.env.DASHBOARD_URL ?? "*",
       methods: ["GET", "POST", "PATCH", "DELETE"],
       allowedHeaders: ["Content-Type", "x-bot-secret"],
+      exposedHeaders: ["X-Next-Cursor"],
     }),
   );
-  app.use(express.json());
+  app.disable("x-powered-by");
+  app.get("/health", (req, res) => {
+    const ready = client.isReady() && require("mongoose").connection.readyState === 1;
+    res.status(ready ? 200 : 503).json({ ok: ready });
+  });
   app.use(auth);
+  app.use(express.json({ limit: "16kb" }));
 
   // ── GET /bot/stats ─────────────────────────────────────────────────────────
   app.get("/bot/stats", (req, res) => {
@@ -63,7 +73,8 @@ function startApiServer(client) {
     const mem = process.memoryUsage();
 
     res.json({
-      online: true,
+      online: client.isReady(),
+      resources: resourceStats(),
       uptime: client.uptime,
       ping: client.ws.ping,
       guildName: guild?.name ?? "Unknown",
@@ -117,9 +128,12 @@ function startApiServer(client) {
     const guild = client.guilds.cache.get(GUILD_ID);
     if (!guild) return res.status(404).json({ error: "Guild not cached" });
 
-    const limit = Math.min(parseInt(req.query.limit ?? "100", 10), 500);
+    const limit = parseLimit(req.query.limit, 100, 100);
     try {
-      const members = await guild.members.fetch({ limit });
+      const after = req.query.after;
+      if (after && !/^\d{17,20}$/.test(after)) return res.status(400).json({ error: "Invalid after cursor" });
+      const members = await guild.members.list({ limit, after, cache: false });
+      if (members.size) res.set("X-Next-Cursor", members.last().id);
       const list = members
         .filter((m) => !m.user.bot)
         .map((m) => ({
@@ -143,7 +157,7 @@ function startApiServer(client) {
   // ── POST /bot/timeout ──────────────────────────────────────────────────────
   app.post("/bot/timeout", async (req, res) => {
     const { userId, durationMs, reason } = req.body;
-    if (!userId || !durationMs)
+    if (!/^\d{17,20}$/.test(userId || "") || !Number.isSafeInteger(durationMs) || durationMs <= 0 || durationMs > 28 * 86400_000)
       return res.status(400).json({ error: "userId and durationMs required" });
 
     const guild = client.guilds.cache.get(GUILD_ID);
@@ -159,7 +173,7 @@ function startApiServer(client) {
   // ── POST /bot/untimeout ────────────────────────────────────────────────────
   app.post("/bot/untimeout", async (req, res) => {
     const { userId } = req.body;
-    if (!userId) return res.status(400).json({ error: "userId required" });
+    if (typeof userId !== "string" || !/^\d{17,20}$/.test(userId)) return res.status(400).json({ error: "userId required" });
 
     const guild = client.guilds.cache.get(GUILD_ID);
     try {
@@ -205,9 +219,10 @@ function startApiServer(client) {
   // Live credits leaderboard (post-rework). ?limit=N caps the result (default 50, max 200).
   app.get("/bot/credits", async (req, res) => {
     try {
-      const limit = Math.min(parseInt(req.query.limit ?? "50", 10), 200);
+      const limit = parseLimit(req.query.limit, 50, 200);
       const users = await creditSchema
         .find()
+        .select("Username UserID Credits Blocked Reason")
         .sort({ Credits: -1 })
         .limit(limit)
         .lean();
@@ -221,9 +236,10 @@ function startApiServer(client) {
   // Archived pre-rework leaderboard — same shape, separate collection.
   app.get("/bot/credits/legacy", async (req, res) => {
     try {
-      const limit = Math.min(parseInt(req.query.limit ?? "50", 10), 200);
+      const limit = parseLimit(req.query.limit, 50, 200);
       const users = await legacyCreditSchema
         .find()
+        .select("Username UserID Credits Blocked Reason")
         .sort({ Credits: -1 })
         .limit(limit)
         .lean();
@@ -240,7 +256,7 @@ function startApiServer(client) {
     try {
       const model =
         req.query.legacy === "true" ? legacyCreditSchema : creditSchema;
-      const user = await model.findOne({ UserID: req.params.userId }).lean();
+      const user = await model.findOne({ UserID: req.params.userId }).slice("Action", -100).lean();
       if (!user)
         return res
           .status(404)
@@ -256,34 +272,23 @@ function startApiServer(client) {
   // Body: { userId, username?, amount, reason }
   app.post("/bot/credits/adjust", async (req, res) => {
     const { userId, username, amount, reason } = req.body;
-    if (!userId || typeof amount !== "number" || !reason) {
+    if (typeof userId !== "string" || !/^\d{17,20}$/.test(userId) || !Number.isSafeInteger(amount) || typeof reason !== "string" || !reason.trim() || reason.length > 1000 || (username != null && typeof username !== "string")) {
       return res
         .status(400)
         .json({ error: "userId, numeric amount, and reason are required" });
     }
 
     try {
-      let creditUser = await creditSchema.findOne({ UserID: userId });
-      const action = {
-        Date: Date.now(),
-        ActionReason: reason,
-        Credit: amount >= 0 ? `+${amount}` : `${amount}`,
-      };
-
-      if (!creditUser) {
-        creditUser = new creditSchema({
-          Username: username ?? userId,
-          UserID: userId,
-          Credits: Math.max(0, amount),
-          Action: [action],
-        });
-      } else {
-        creditUser.Credits = Math.max(0, creditUser.Credits + amount);
-        if (username) creditUser.Username = username;
-        creditUser.Action.push(action);
-      }
-
-      await creditUser.save();
+      const creditUser = await creditSchema.findOneAndUpdate({ UserID: userId }, [
+        { $set: {
+          UserID: { $literal: userId },
+          Username: username ? { $literal: username } : { $ifNull: ["$Username", { $literal: userId }] },
+          Credits: { $max: [0, { $add: [{ $ifNull: ["$Credits", 0] }, amount] }] },
+          Action: { $concatArrays: [{ $ifNull: ["$Action", []] }, { $literal: [{
+            Date: new Date(), ActionReason: reason, Credit: amount >= 0 ? `+${amount}` : `${amount}`,
+          }] }] },
+        } },
+      ], { upsert: true, new: true });
       res.json({ ok: true, credits: creditUser.Credits });
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -294,7 +299,7 @@ function startApiServer(client) {
   // Body: { userId, reason? }
   app.post("/bot/credits/block", async (req, res) => {
     const { userId, reason } = req.body;
-    if (!userId) return res.status(400).json({ error: "userId required" });
+    if (typeof userId !== "string" || !/^\d{17,20}$/.test(userId)) return res.status(400).json({ error: "userId required" });
 
     try {
       const creditUser = await creditSchema.findOneAndUpdate(
@@ -312,7 +317,7 @@ function startApiServer(client) {
   // Body: { userId }
   app.post("/bot/credits/unblock", async (req, res) => {
     const { userId } = req.body;
-    if (!userId) return res.status(400).json({ error: "userId required" });
+    if (typeof userId !== "string" || !/^\d{17,20}$/.test(userId)) return res.status(400).json({ error: "userId required" });
 
     try {
       const creditUser = await creditSchema.findOneAndUpdate(
@@ -330,12 +335,23 @@ function startApiServer(client) {
     }
   });
 
-  // ── Health check (no auth needed) ─────────────────────────────────────────
-  app.get("/health", (req, res) => res.json({ ok: true }));
-
-  app.listen(PORT, () => {
-    console.log(`[API] Dashboard REST server listening on port ${PORT}`);
-  });
+  return app;
 }
 
-module.exports = { startApiServer };
+function startApiServer(client) {
+  const app = createApiApp(client);
+  const server = app.listen(PORT, () => {
+    console.log(`[API] Dashboard REST server listening on port ${PORT}`);
+  });
+  server.maxConnections = 32;
+  server.requestTimeout = 15_000;
+  server.headersTimeout = 10_000;
+  server.on("error", error => console.error("[API]", error.message));
+  return server;
+}
+function parseLimit(value, fallback, max) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? Math.min(parsed, max) : fallback;
+}
+
+module.exports = { startApiServer, createApiApp };

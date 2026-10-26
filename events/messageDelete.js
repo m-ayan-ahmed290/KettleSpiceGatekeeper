@@ -23,12 +23,20 @@ const client = require("../utilities/client");
 const IMAGE_LOG_CHANNEL_ID = "1184557200480403487";
 const WEBHOOK_NAME         = "Kettle's Tea Garden Media Logger";
 const MAX_EMBED_DESC       = 4000;
+let activeDeletes = 0;
 
 module.exports = {
   name: "messageDelete",
   once: false,
 
   async execute(message) {
+    if (activeDeletes >= 2) { consumeCache(message.id); return; }
+    activeDeletes++;
+    try { return await logDeletedMessage(message); }
+    finally { activeDeletes--; }
+  },
+};
+async function logDeletedMessage(message) {
     if (!message.guild) return;
 
     const logChannelId = log_channel[message.guild.id];
@@ -138,7 +146,7 @@ module.exports = {
     if (!embeds.length) return;
 
     // ── Send via webhook ────────────────────────────────────────────────────
-    const chunks = listToMatrix(embeds, 10);
+    const chunks = listToMatrix(embeds, 3);
     for (const chunk of chunks) {
       try {
         const webhook = await getOrCreateWebhook(logChannel, WEBHOOK_NAME);
@@ -152,8 +160,7 @@ module.exports = {
         }
       }
     }
-  },
-};
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

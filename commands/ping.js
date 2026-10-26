@@ -4,6 +4,7 @@
 
 const { SlashCommandBuilder } = require("@discordjs/builders");
 const { MessageEmbed } = require("discord.js");
+const { resourceStats } = require("../utilities/resourceStats");
 const { cacheSize } = require("../utilities/attachmentCache");
 
 module.exports = {
@@ -17,6 +18,7 @@ module.exports = {
       const interactionLatency = Date.now() - interaction.createdTimestamp;
       const uptimeMs           = interaction.client.uptime ?? 0;
       const mem                = process.memoryUsage();
+      const resources = resourceStats();
 
       const embed = new MessageEmbed()
         .setTitle("🏓 Pong!")
@@ -27,6 +29,8 @@ module.exports = {
           { name: "⏱️ Uptime",            value: formatUptime(uptimeMs),     inline: true },
           { name: "🧠 Heap Used",         value: `${mb(mem.heapUsed)} MB`,   inline: true },
           { name: "💾 RSS",               value: `${mb(mem.rss)} MB`,        inline: true },
+          { name: "CPU (one core)", value: `${resources.cpuPercent}% / 35% budget`, inline: true },
+          { name: "Attachment Memory", value: `${mb(resources.attachments.bytes)} / 24 MB`, inline: true },
           { name: "📦 Cached Msgs",       value: `${cacheSize()}`,           inline: true },
         )
         .setThumbnail(interaction.user.avatarURL({ dynamic: true }))

@@ -18,13 +18,14 @@
  * without doing anything.
  */
 
+require("dotenv").config();
 const mongoose = require("mongoose");
 const { mongoURL } = require("../config.json");
 const CreditModel = require("../schemas/credits");
 const LegacyCreditModel = require("../schemas/legacyCredits");
 
 async function run() {
-  await mongoose.connect(mongoURL);
+  await mongoose.connect(process.env.MONGODB_URI || mongoURL);
   console.log("[Migrate] Connected to MongoDB.");
 
   const currentCredits = await CreditModel.find().lean();

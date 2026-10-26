@@ -8,11 +8,14 @@ const actionSchema = new Schema({
 
 const creditSchema = new Schema({
   Username: String,
-  UserID: String,
+  UserID: { type: String, unique: true, sparse: true },
+  RecentSources: { type: [String], default: [], select: false },
   Credits: { type: Number, default: 0 },
   Blocked: Boolean,
   Reason: String,
   Action: [actionSchema],
 });
+
+creditSchema.index({ Credits: -1 });
 
 module.exports = model(`creditSchema`, creditSchema);

@@ -18,19 +18,19 @@ const GAMES = {
   "genshin-impact": {
     title:   "KTG | Genshin Impact Redeem Codes",
     redeemUrl: "https://genshin.hoyoverse.com/en/gift",
-    codeUrl:   (code) => `https://genshin.hoyoverse.com/en/gift?code=${code}`,
+    codeUrl:   (code) => `https://genshin.hoyoverse.com/en/gift?code=${encodeURIComponent(code)}`,
     imageKey: "genshin",
   },
   "star-rail": {
     title:   "KTG | Honkai: Star Rail Redeem Codes",
     redeemUrl: "https://hsr.hoyoverse.com/gift",
-    codeUrl:   (code) => `https://hsr.hoyoverse.com/gift?code=${code}`,
+    codeUrl:   (code) => `https://hsr.hoyoverse.com/gift?code=${encodeURIComponent(code)}`,
     imageKey: "hsr",
   },
   "zenless": {
     title:   "KTG | Zenless Zone Zero Redeem Codes",
     redeemUrl: "https://zenless.hoyoverse.com/redemption",
-    codeUrl:   (code) => `https://zenless.hoyoverse.com/redemption?code=${code}`,
+    codeUrl:   (code) => `https://zenless.hoyoverse.com/redemption?code=${encodeURIComponent(code)}`,
     imageKey: "zzz",
   },
 };
@@ -67,11 +67,13 @@ module.exports = {
 
     // Validate codes input
     const rawCodes = interaction.options.getString("codes");
-    const codes    = rawCodes.split(",").map((c) => c.trim()).filter(Boolean);
+    const codes    = [...new Set(rawCodes.split(",").map((c) => c.trim()).filter(Boolean))];
 
     if (codes.length === 0) {
       return interaction.reply({ content: "❌ No valid codes provided.", ephemeral: true });
     }
+
+    if (codes.some(code => !/^[A-Za-z0-9_-]{1,80}$/.test(code))) return interaction.reply({ content: "❌ Codes must be 1–80 letters, digits, underscores or hyphens.", ephemeral: true });
 
     if (codes.length > 15) {
       return interaction.reply({ content: "❌ Maximum 15 codes at a time.", ephemeral: true });
@@ -81,12 +83,10 @@ module.exports = {
     const pin     = interaction.options.getBoolean("pin");
 
     // Fetch image links
-    const links = await getImageLinks();
-    if (!links) {
-      return interaction.reply({ content: "❌ Failed to retrieve banner images from the database.", ephemeral: true });
-    }
+    await interaction.deferReply({ ephemeral: true });
+    const links = await getImageLinks() || {};
 
-    await interaction.reply({ content: `${emoji.loading} Sending...`, ephemeral: true });
+    await interaction.editReply({ content: `${emoji.loading} Sending...` });
 
     try {
       // Build description
