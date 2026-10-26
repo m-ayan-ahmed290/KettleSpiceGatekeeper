@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("fs");
 const { Collection } = require("discord.js");
 const client = require("../utilities/client");
-const expected = ["birthday", "block-words", "credits", "edit-ship", "leaderboard", "manage-mod", "ping", "profile", "redeem", "roles-management", "ship", "game", "warn", "help", "remind", "poll", "purge", "slowmode", "serverinfo", "setup"];
+const expected = ["birthday", "block-words", "credits", "edit-ship", "leaderboard", "manage-mod", "ping", "profile", "redeem", "roles-management", "ship", "game", "warn", "help", "remind", "poll", "purge", "slowmode", "serverinfo", "setup", "migration-review"];
 test("all existing commands plus help load and serialize valid definitions", () => {
   client.commands = new Collection();
   for (const file of fs.readdirSync(require("path").join(__dirname, "../commands"))) {
@@ -30,7 +30,7 @@ test("ship without cached partners asks for explicit names", async () => {
 test.after(() => client.destroy());
 
 test("server setup and credit administration require server administrator permission", async () => {
-  for (const name of ["setup", "manage-mod", "roles-management"]) {
+  for (const name of ["setup", "manage-mod", "roles-management", "migration-review"]) {
     let reply;
     await require("../events/interactionCreate").execute({ isChatInputCommand: () => true, commandName: name,
       client, guild: { id: "test" }, user: { id: "regular-member" }, options: { data: [] },

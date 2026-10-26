@@ -12,7 +12,7 @@ Keep the **same bot application/token and MongoDB URI/database**. Version 3 keep
 
 ## First boot and preserved data
 
-First boot connects MongoDB, checks ambiguous legacy identities, and copies old records into new guild-aware collections **before enabling normal database commands/credits**. It streams records in batches of 25, uses upserts with `$setOnInsert`, and records a completion marker. Original collections are never cleared or modified; already imported target identities are not overwritten on a retry. The server logs copied counts, not record contents. A first import can take longer than a normal restart.
+First boot connects MongoDB, records duplicate-identity warnings, and copies old records into new guild-aware collections **before enabling normal database commands/credits**. Version 3.0.1 accepts the duplicates that stopped 3.0.0 from starting. It streams records in batches of 25, uses upserts with `$setOnInsert`, and records a completion marker. Original collections are never cleared or modified; already imported target identities are not overwritten on a retry. The server logs copied counts, not record contents. A first import can take longer than a normal restart.
 
 | Original data | Version 3 destination | Guild assignment |
 | --- | --- | --- |
@@ -29,7 +29,11 @@ First boot connects MongoDB, checks ambiguous legacy identities, and copies old 
 
 Balances, blocked status/reasons, full action history, stored ship strengths, birthdays and announcement dates are carried over. New guilds do not read the original global collections. Global historical data is assigned to the primary Kettle guild because the older bot did not store a server identity there.
 
-If duplicate user/ship identities or malformed identifiers exist, import stops with an actionable error instead of guessing a balance or overwriting history. Back up and reconcile those source records, then restart; already imported rows are retained. Identical blocked-word duplicates are coalesced; the original records remain in the old collection. The old single-document banner semantics are retained by importing the first banner row for an identity.
+If duplicate user/ship identities exist, version 3.0.1 imports the **first record in the legacy collection's natural order** as its compatibility baseline. The old bot also used first-match lookups; this policy does not infer a combined total. **Balances and histories are never summed or merged automatically.** Every original duplicate remains in its original collection. If a guild identity was already imported or has received later awards/adjustments, its active record is not overwritten on retry.
+
+Run the administrator-only `/migration-review` command after the upgrade. It displays this server's recorded warnings, the first source record ID, and up to five candidate source balances/block states per warning. Use `user:@Moderator` to filter credit warnings, and `page:` for more warnings. Compare the candidates and your backup. If the active credit total needs correcting, explicitly use `/manage-mod credits moderator:@Moderator amount:<correct total> action:set reason:<your review reason>`. That records a normal manual adjustment; it does not remove source rows. Include any credits earned after the import when deciding that total. The review command itself is read-only and warnings remain as an audit trail after a correction.
+
+Malformed rows missing required identifiers are left in the source, listed for review and skipped, rather than causing a crash or inventing a user identity. Identical blocked-word duplicates are coalesced; the original records remain in the old collection. The old single-document banner semantics are retained by importing the first banner row for an identity.
 
 Do not run `scripts/archiveLegacyCredits.js` for this update. It is retired and exits without modifying data. Do not drop old unique indexes to enable multi-guild use: the new collections have their own guild-aware indexes. Original snapshots remain useful for rollback, but after operating on 3.0 the old collections will not contain newly earned credits/birthdays; a downgrade must reconcile post-upgrade writes from a current backup.
 
@@ -86,7 +90,7 @@ Kettle's custom emojis remain in use for its original guild IDs. Other servers u
 
 ## Check after startup
 
-- Confirm `[Migration]` completion and `[Ready]` command registration in logs, with no duplicate-identity errors.
+- Confirm `[Migration]` completion and `[Ready]` command registration in logs. Duplicate-identity warnings are non-fatal in 3.0.1; use `/migration-review` to inspect them.
 - `/setup view` in each original guild: check destinations and feature flags.
 - `/credits`, `/leaderboard credits`, `/leaderboard legacy-credits`, `/leaderboard ships` and `/profile view`: confirm pre-upgrade values against your backup.
 - `/birthday`: verify your saved date; inspect the configured birthday channels and eligibility roles.

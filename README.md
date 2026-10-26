@@ -1,6 +1,6 @@
-# Gatekeeper Bot 3.0
+# Gatekeeper Bot 3.0.1
 
-A Discord bot for multiple servers: moderation, automatic roles, birthdays, moderator credits, profiles, reminders, redeem codes, polls and solo/cooperative games. It retains all 13 original commands and has 20 top-level commands, including the administrator-only `/setup` command.
+A Discord bot for multiple servers: moderation, automatic roles, birthdays, moderator credits, profiles, reminders, redeem codes, polls and solo/cooperative games. It retains all 13 original commands and has 21 top-level commands, including the administrator-only `/setup` command.
 
 **Already using it in Kettle's server? Read [KETTLE_SETUP.md](KETTLE_SETUP.md) before updating.** It explains the original settings and the non-destructive data import. For another server, follow [MULTI_GUILD.md](MULTI_GUILD.md).
 
@@ -37,6 +37,8 @@ Both `node index.js` and `node start.js` apply a 256 MiB old-space limit. `index
 ## Multiple servers
 
 Settings, credits and block status, archived credits, birthdays, blocked words, ships, redeem banners, strike records and new game statistics are scoped by GuildID. Profiles and reminders already had guild identities and retain their collections. New servers receive no Kettle channels, role rules, game exclusions or automatic moderation. Run `/setup view` in each server to begin.
+
+Legacy duplicates no longer prevent startup: the importer uses the first source record as a compatibility baseline, retains every original, and records administrator-readable warnings in `/migration-review`. It never sums duplicate balances or overwrites an already imported guild record. See the preservation guide before making any manual correction.
 
 Original Kettle defaults are isolated in `presets/kettle.json`, applied only to those exact original server IDs. Saved `/setup` choices override the preset. Custom Kettle emojis remain available there; other servers use standard Unicode emojis. Destinations are resolved through the current guild, so media/logging will never post into another server's channel.
 

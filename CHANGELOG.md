@@ -1,3 +1,10 @@
+# 3.0.1
+
+- Fix startup failure when the legacy credit collection contains duplicate moderator identities.
+- Import the first legacy source record as a compatibility baseline without summing balances/histories, deleting source records or overwriting existing guild records on retries.
+- Store duplicate/missing-identifier warnings and add the administrator-only, read-only `/migration-review` command for per-server inspection.
+- Keep database connection failures fatal, while malformed legacy rows without identifiers are retained and reported instead of crashing startup.
+
 # 3.0.0
 
 - Upgrade to discord.js 14.27.0, Express 5.3.0 and Mongoose 8.24.7; remove unused Moment, old builders, node-fetch and nodemon dependency chains. Full npm audit reports zero vulnerabilities at validation time; CI audits every release.
