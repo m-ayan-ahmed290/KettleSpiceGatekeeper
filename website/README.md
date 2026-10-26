@@ -42,7 +42,7 @@ The packaging script also writes `manifest.json` and `SHA256SUMS.txt`. ZIP creat
 ## Deploy
 
 - **Static hosting:** upload/extract the static ZIP, with `index.html` and `_next/` at the public root. Disable SPA rewrites that send JavaScript asset requests to index.html.
-- **Vercel:** import the repository, choose `website` as the Root Directory, and use the detected Next.js preset. Run the standard `npm run build` command; the project uses static export.
+- **Vercel:** import the repository, choose `website` as the Root Directory, and use the detected Next.js preset. Run the standard `npm run build` command and leave Output Directory at its default. Vercel's Next.js adapter reads `.next` build metadata even with static export; do not override its Output Directory to `out`.
 - **Other Git hosts:** choose `website` as the root, install with `npm ci`, build with `npm run build`, and publish `out`.
 
 Host this website separately from the 512 MB Wispbyte Discord bot container. Static hosting does not add a second Node.js process to that container. Existing bot startup files, environment variables and MongoDB data do not change.

@@ -1,4 +1,4 @@
-# Website 1.0.0 validation
+# Website 1.0.1 validation
 
 Validated on 26 October 2026 using Node.js 24 and Chromium against the production static export.
 
