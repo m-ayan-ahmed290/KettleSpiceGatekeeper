@@ -1,0 +1,186 @@
+/**
+ * redeem.js — Post Genshin / HSR / ZZZ redeem code embeds with clickable buttons.
+ *
+ * Fixes:
+ *  - `interaction.isReplied` → `interaction.replied` (isReplied is not a property)
+ *  - URL generator called with full subcommand name; now maps cleanly
+ *  - Empty/whitespace-only codes are filtered out
+ *  - Description mutation pattern (appending to embed.description) is fragile;
+ *    replaced with building the description string before constructing the embed
+ */
+
+const { SlashCommandBuilder } = require("@discordjs/builders");
+const { MessageEmbed, Permissions, MessageButton, MessageActionRow } = require("discord.js");
+const imgLinks = require("../schemas/imgLinks");
+const { emoji } = require("../data/emojis.json");
+
+const GAMES = {
+  "genshin-impact": {
+    title:   "KTG | Genshin Impact Redeem Codes",
+    redeemUrl: "https://genshin.hoyoverse.com/en/gift",
+    codeUrl:   (code) => `https://genshin.hoyoverse.com/en/gift?code=${code}`,
+    imageKey: "genshin",
+  },
+  "star-rail": {
+    title:   "KTG | Honkai: Star Rail Redeem Codes",
+    redeemUrl: "https://hsr.hoyoverse.com/gift",
+    codeUrl:   (code) => `https://hsr.hoyoverse.com/gift?code=${code}`,
+    imageKey: "hsr",
+  },
+  "zenless": {
+    title:   "KTG | Zenless Zone Zero Redeem Codes",
+    redeemUrl: "https://zenless.hoyoverse.com/redemption",
+    codeUrl:   (code) => `https://zenless.hoyoverse.com/redemption?code=${code}`,
+    imageKey: "zzz",
+  },
+};
+
+const BULLET_EMOJIS = ["bp1", "bp2", "bp3", "bp4", "bp5"];
+
+module.exports = {
+  data: new SlashCommandBuilder()
+    .setName("redeem")
+    .setDescription("Post game redeem code embeds with clickable buttons.")
+    .addSubcommand((sub) =>
+      sub.setName("genshin-impact").setDescription("Redeem codes for Genshin Impact.")
+        .addStringOption(codeOption("Genshin Impact"))
+        .addBooleanOption(pinOption())
+        .addChannelOption(channelOption())
+    )
+    .addSubcommand((sub) =>
+      sub.setName("star-rail").setDescription("Redeem codes for Honkai: Star Rail.")
+        .addStringOption(codeOption("Honkai: Star Rail"))
+        .addBooleanOption(pinOption())
+        .addChannelOption(channelOption())
+    )
+    .addSubcommand((sub) =>
+      sub.setName("zenless").setDescription("Redeem codes for Zenless Zone Zero.")
+        .addStringOption(codeOption("Zenless Zone Zero"))
+        .addBooleanOption(pinOption())
+        .addChannelOption(channelOption())
+    )
+    .setDefaultMemberPermissions(Permissions.FLAGS.MANAGE_MESSAGES),
+
+  async execute(interaction) {
+    const subcmd = interaction.options.getSubcommand();
+    const game   = GAMES[subcmd];
+
+    // Validate codes input
+    const rawCodes = interaction.options.getString("codes");
+    const codes    = rawCodes.split(",").map((c) => c.trim()).filter(Boolean);
+
+    if (codes.length === 0) {
+      return interaction.reply({ content: "❌ No valid codes provided.", ephemeral: true });
+    }
+
+    if (codes.length > 15) {
+      return interaction.reply({ content: "❌ Maximum 15 codes at a time.", ephemeral: true });
+    }
+
+    const channel = interaction.options.getChannel("channel") ?? interaction.channel;
+    const pin     = interaction.options.getBoolean("pin");
+
+    // Fetch image links
+    const links = await getImageLinks();
+    if (!links) {
+      return interaction.reply({ content: "❌ Failed to retrieve banner images from the database.", ephemeral: true });
+    }
+
+    await interaction.reply({ content: `${emoji.loading} Sending...`, ephemeral: true });
+
+    try {
+      // Build description
+      const codeLines = codes.map((code, i) => {
+        const bp = emoji[BULLET_EMOJIS[i % BULLET_EMOJIS.length]];
+        return `${bp} \`${code}\` — [Redeem](${game.codeUrl(code)})`;
+      });
+
+      const description =
+        `${emoji.bp3} [Official Redeem Page](${game.redeemUrl})\n` +
+        `${emoji.bp5} Codes expire quickly — redeem ASAP!\n\n` +
+        codeLines.join("\n");
+
+      const embed = new MessageEmbed()
+        .setTitle(game.title)
+        .setColor("BLURPLE")
+        .setDescription(description)
+        .setImage(links[game.imageKey])
+        .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
+        .setFooter({
+          text: "Kettle's Tea Garden",
+          iconURL: interaction.guild.iconURL({ dynamic: true }),
+        })
+        .setTimestamp();
+
+      // Build button rows (max 5 per row, max 5 rows = 25 buttons, we cap at 15)
+      const rows = [];
+      for (let i = 0; i < codes.length; i += 3) {
+        const batch   = codes.slice(i, i + 3);
+        const btnRow  = new MessageActionRow().addComponents(
+          batch.map((code) =>
+            new MessageButton()
+              .setLabel(code)
+              .setStyle("LINK")
+              .setURL(game.codeUrl(code))
+          )
+        );
+        rows.push(btnRow);
+      }
+
+      const sentMsg = await channel.send({ embeds: [embed], components: rows });
+      if (pin) {
+        try { await sentMsg.pin(); } catch (e) {
+          console.warn("[Redeem] Pin failed:", e.message);
+        }
+      }
+
+      const summary = codes
+        .map((c, i) => `${emoji[BULLET_EMOJIS[i % BULLET_EMOJIS.length]]} ${c}`)
+        .join("\n");
+
+      await interaction.editReply({
+        content: `${emoji.success} Done!\n\n${summary}\n\n${emoji.bp4} **Channel:** ${channel}`,
+      });
+    } catch (error) {
+      console.error("[Redeem] Error:", error);
+      await interaction.editReply({
+        content: `❌ Something went wrong: \`${error.message}\``,
+      });
+    }
+  },
+};
+
+// ─── Option builders ──────────────────────────────────────────────────────────
+
+function codeOption(game) {
+  return (opt) =>
+    opt.setName("codes")
+      .setDescription(`Comma-separated ${game} redeem codes.`)
+      .setRequired(true);
+}
+
+function pinOption() {
+  return (opt) =>
+    opt.setName("pin").setDescription("Pin the message in the channel?").setRequired(true);
+}
+
+function channelOption() {
+  return (opt) =>
+    opt.setName("channel")
+      .setDescription("Channel to post in (defaults to current).")
+      .addChannelTypes(0)
+      .setRequired(false);
+}
+
+// ─── DB helper ────────────────────────────────────────────────────────────────
+
+async function getImageLinks() {
+  try {
+    const doc = await imgLinks.findOne({});
+    if (!doc) return null;
+    return { genshin: doc.Genshin, hsr: doc.HSR, zzz: doc.ZZZ };
+  } catch (err) {
+    console.error("[Redeem] Failed to fetch image links:", err);
+    return null;
+  }
+}

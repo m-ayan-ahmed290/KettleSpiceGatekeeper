@@ -1,0 +1,12 @@
+{
+  "roles": {
+    "T1": ["Twitch Tier 1", "YT Member Tier 1"],
+    "T2": ["Twitch Tier 2", "YT Member Tier 2"],
+    "T3": "Twitch Tier 3"
+  },
+  "TRoles": {
+    "TR1": "Smol Teabag Tier 1",
+    "TR2": "Mega Teabag Tier 2",
+    "TR3": "Venti Teabag Tier 3"
+  }
+}
