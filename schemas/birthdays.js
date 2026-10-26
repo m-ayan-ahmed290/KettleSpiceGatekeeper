@@ -1,13 +1,7 @@
-const { Schema, model } = require(`mongoose`);
-
-const BirthdaySchema = new Schema({
-  Username: { type: String, required: true },
-  UserID: { type: String, required: true, unique: true },
-  GuildID: { type: String, required: true },
-  Date: { type: Date, required: true },
-  HasRole: { type: Boolean, required: true },
-  LastWished: { type: String, default: "" },
-  Timezone: { type: Number, required: true }, // UTC offset, e.g. -5, 0, 5
+const { Schema, model } = require("mongoose");
+const schema = new Schema({ GuildID: { type: String, required: true }, UserID: { type: String, required: true },
+  Username: String, Date: { type: Date, required: true }, HasRole: Boolean,
+  LastWished: { type: String, default: "" }, Timezone: { type: Number, default: 0 },
 });
-
-module.exports = model("Birthday", BirthdaySchema);
+schema.index({ GuildID: 1, UserID: 1 }, { unique: true });
+module.exports = model("GuildBirthday", schema, "guildbirthdays");

@@ -2,7 +2,7 @@
 
 const client = require("../utilities/client");
 
-const LOG_CHANNEL_ID = "1105487618189295686";
+const { getGuildSettings, guildChannel } = require("../utilities/guildSettings");
 
 module.exports = {
   name: "messageReactionAdd",
@@ -16,13 +16,15 @@ module.exports = {
 // ─── Core handler ─────────────────────────────────────────────────────────────
 
 async function handleReaction(reaction, user) {
-  if (!reaction || !user) return;
+  if (!reaction || !user || !reaction.message.guild) return;
+  const settings = await getGuildSettings(reaction.message.guild.id);
+  if (!settings.features.egg) return;
   if (reaction.partial) await reaction.fetch();
 
   const emojiName = reaction.emoji.name?.toLowerCase() ?? "";
   if (emojiName !== "🥚" && !emojiName.includes("egg")) return;
 
-  const logChannel = await client.channels.fetch(LOG_CHANNEL_ID).catch(() => null);
+  const logChannel = await guildChannel(reaction.message.guild, settings.channels.status || settings.channels.moderation);
 
   try {
     await reaction.users.remove(user.id);

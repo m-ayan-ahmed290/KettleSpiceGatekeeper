@@ -4,9 +4,9 @@
 
 const { enterCommand } = require("../utilities/commandGuard");
 const { runCommand } = require("../utilities/runCommand");
-const { MessageEmbed } = require("discord.js");
+const { EmbedBuilder } = require("discord.js");
 const chalk = require("chalk");
-const { modChId } = require("../config.json");
+const { getGuildSettings, guildChannel } = require("../utilities/guildSettings");
 const client = require("../utilities/client");
 
 module.exports = {
@@ -14,11 +14,13 @@ module.exports = {
   once: false,
 
   async execute(interaction) {
-    if (!interaction.isCommand()) return;
+    if (!interaction.isChatInputCommand()) return;
 
     const command = interaction.client.commands.get(interaction.commandName);
     if (!command) return;
 
+    if (interaction.client.dataReady === false && !["ping", "help", "serverinfo"].includes(interaction.commandName))
+      return interaction.reply({ content: "The database is initializing. Try again shortly.", ephemeral: true });
     // Resolve subcommand and options for logging
     const optionsData = interaction.options?.data ?? [];
     let subcommandName = null;
@@ -75,7 +77,8 @@ module.exports = {
       chalk.gray(`(${interaction.guild?.name ?? "DM"})`)
     );
 
-    const logChannel = await interaction.client.channels.fetch(modChId).catch(() => null);
+    const settings = await getGuildSettings(interaction.guild.id);
+    const logChannel = await guildChannel(interaction.guild, settings.channels.moderation);
     if (!logChannel) return;
 
     // Build log embed
@@ -94,7 +97,7 @@ module.exports = {
       });
     }
 
-    const embed = new MessageEmbed()
+    const embed = new EmbedBuilder()
       .setColor("#00e676")
       .setTitle(`✨ /${interaction.commandName.toUpperCase()} Executed`)
       .setDescription(

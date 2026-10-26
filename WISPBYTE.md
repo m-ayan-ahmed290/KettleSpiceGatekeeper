@@ -1,40 +1,48 @@
-# Upload to Wispbyte
+# Deploy Gatekeeper 3.0 on Wispbyte
 
-Use the **ktg-bot-wispbyte.zip** asset from the latest GitHub Release. It includes production dependencies and extracts directly into the server root. The GitHub “Code → Download ZIP” option contains source only and needs `npm ci --omit=dev --no-audit --no-fund` before use.
+Your Node.js 24.22.1 runtime is suitable. Wispbyte's published free tier provides 35% of one vCPU, 512 MB RAM and 1,024 MB disk; keep MongoDB external.
 
-## Update an existing server
+## If GitHub is linked
 
-1. Stop the bot. Back up your existing `.env` and `config.json` locally. Keep your MongoDB database; this update does not reset credits, profiles or birthdays.
-2. **Move credentials first:** put the existing token in `DISCORD_TOKEN` and the existing MongoDB connection string in `MONGODB_URI`, either in Startup environment variables or a `.env` file. The new `config.json` contains your existing server/channel IDs with blank credentials. Preserve any IDs you have changed on the server. Do not upload your `.env` to GitHub.
-3. Upload `ktg-bot-wispbyte.zip` through Files and extract it into the server root. `start.js`, `index.js` and `package.json` must be directly in the root. The archive never overwrites `.env`. Remove the uploaded ZIP after extracting to save storage.
-4. In Startup choose **Node.js 22 or 24**, set the entry file to **start.js**, or use **node start.js** if the panel exposes the entire startup command. The launcher applies a 256 MiB old-space limit even without a custom command. Bundled dependencies mean no dependency installation is needed. Disable optional automatic dependency reinstalls if your panel exposes that setting; leave the extra packages field empty.
-5. Set `DISCORD_TOKEN` and `MONGODB_URI`. Optionally set `BOT_API_SECRET`, `BOT_API_PORT` to the allocated HTTP port, and `DASHBOARD_URL` for the existing dashboard. The bot also accepts `PORT` or `SERVER_PORT` for its HTTP listener. Without an API secret, moderation endpoints remain disabled.
-6. Enable Server Members and Message Content intents in the Discord Developer Portal. Ensure the bot's role can manage the roles below it, timeout members, manage messages/channels, view audit logs, create webhooks, attach files, embed links and add reactions in the relevant channels.
-7. Start. Existing global commands and the new ones are registered automatically; Discord clients may need time to refresh their command list. Test `/ping`, `/help`, `/serverinfo`, `/birthday`, and `/remind set when:1m text:test`.
+The startup log `if [[ -d .git ]] && [[ 0 == "1" ]]; then git pull; fi` means **automatic Git pulling is disabled**. Linking a repository alone does not prove that the running files match GitHub.
 
-Keep the **same MongoDB URI** to retain existing data. No migration/reset script runs automatically. The existing `scripts/archiveLegacyCredits.js` is an old one-off reset/archive tool; do not run it as part of this update. Review startup logs for duplicate-credit index errors before allowing new credit awards. If the existing collection contains duplicate UserIDs, reconcile them from a backup first.
+1. Stop the server and back up private configuration/database as described in [KETTLE_SETUP.md](KETTLE_SETUP.md).
+2. Sync/redeploy the linked repository to the latest `main`, or enable the panel's Git auto-update option if available. Verify `package.json` says **3.0.0** after updating.
+3. Refresh dependencies from the new lockfile: use `npm ci --omit=dev --ignore-scripts --no-audit --no-fund` if the panel supports shell/install commands. Otherwise remove the old `node_modules` folder in Files while stopped, then start; the startup command you posted installs dependencies only when that directory is absent. The release has no development dependency tree.
+4. Keep `DISCORD_TOKEN` and `MONGODB_URI` in Startup variables or `.env`. Preserve the existing URI/database. Set optional dashboard settings only if used.
+5. The panel may keep `index.js` as the startup file. **Both index.js and start.js now enforce the 256 MiB heap limit.** If editing the full command, use `node index.js` or `node start.js`.
+6. Start and check migration/ready logs. Then test the commands listed in the Kettle guide. A fresh `npm audit` should report zero package vulnerabilities for this release's lockfile.
 
-## Features
+Do not set extra package names in `NODE_PACKAGES` unless genuinely required by your own code: they run another npm install on every startup and can change the audited dependency tree. Leave the extra install/uninstall fields empty for the supplied bot. Never use `npm audit fix --force` as an upgrade procedure for this project.
 
-- `/remind set`, `/remind list`, `/remind cancel`: persistent personal DM reminders, up to 10 pending per person. One worker checks every minute and sends up to 10 per pass, with retries. Pending reminders survive restarts. A crash after a DM is sent but before its database record is removed can produce a duplicate. Canceling a delivery already in progress cannot retract the DM. Failed reminders remain visible for seven days after their due date.
-- `/poll question:... choices:Tea | Coffee`: 2–6 choices, reaction voting, multiple selections allowed. The bot adds one seed reaction per option, which should be excluded when reading counts. No background poll collectors are retained.
-- `/purge amount:... user:...`: delete up to 100 matching recent messages, skipping messages at least 14 days old.
-- `/slowmode seconds:...`: 0 disables slowmode; otherwise 1–21600 seconds.
-- `/serverinfo`: basic server details without a full member fetch.
-- `/block-words list page:...`: inspect the existing blocklist.
-- `/birthday` with no arguments: privately view your saved birthday; existing date/timezone options still set or remove it.
+## If uploading a ZIP
 
-## Limits and activity
+Use **ktg-bot-wispbyte.zip** from the latest GitHub Release; it includes production dependencies and extracts directly into the server root. The GitHub Code → Download ZIP option is source only.
 
-Wispbyte publishes 35% of one vCPU, 512 MB RAM, 1 GB storage and a temporary full-core startup boost. Its homepage and plan comparison say to log into the panel every **14 days**; some older KB text says monthly. Follow the shorter interval and your panel's current notices. Wispbyte's community support has also reported sustained-CPU stops below the 35% quota; use the panel to monitor actual sustained usage.
+1. Stop and back up configuration/database. Move any old config credentials into private environment settings before overwriting `config.json`.
+2. Remove the previous `node_modules` folder while stopped, upload the bundled ZIP and extract into the root. `index.js`, `bot.js`, `start.js`, `presets/`, `package.json` and `node_modules/` must be directly under the server root. The archive excludes `.env` and does not overwrite it.
+3. Remove the uploaded ZIP after extraction to save storage. No npm install is needed for this bundle.
+4. Use Node.js 24 and start with `index.js` or `start.js`. If the panel offers optional automatic dependency reinstalls, disable them when using the bundled dependencies.
 
-The bot avoids media processing, limits HTTP/Discord caches, uses three MongoDB connections and bounded bulk jobs, and skips optional attachment downloads when RSS exceeds 384 MiB or sampled CPU exceeds 15%. Commands have a two-second per-person cooldown and at most eight simultaneous command executions. These are safeguards, not a promise of zero throttling under every guild workload. MongoDB must be external to this 512 MB server.
+Do not run `bot.js` directly: it is an internal implementation file. Do not run the retired credit archive/reset script. Keep the original database URI so the data migration can preserve existing records.
 
-Wispbyte enforces CPU, total RAM and disk quotas. The bundled systemd unit is for a separate Linux host and is **not needed on Wispbyte**. RSS can exceed the JavaScript heap size because buffers, native memory and the runtime also use RAM. Do not run the synthetic benchmark on the free host; run it locally or in CI.
+## Variables and permissions
 
-## Checked sources (26 October 2026)
+Required: `DISCORD_TOKEN`, `MONGODB_URI`. Optional: `BOT_API_SECRET`, `BOT_API_PORT`, `DASHBOARD_URL`, `GUILD_ID`. The HTTP port also accepts the panel's `PORT` or `SERVER_PORT`. Enter values without quotes in panel fields; `.env` syntax allows quotes.
+
+Enable Server Members and Message Content intents in the Discord Developer Portal. Channel permissions depend on enabled features: send/view/read history, embed links, attach files, manage messages, add reactions and manage webhooks. Roles must be below the bot's highest role; timeout and audit-credit features need Moderate Members and View Audit Log. Slowmode needs Manage Channels. New server administrators use `/setup` as described in [MULTI_GUILD.md](MULTI_GUILD.md).
+
+Without a dashboard secret, protected API routes return 503. The dashboard secret grants operator access across all joined servers. Keep it private. `GUILD_ID` only chooses the dashboard default; use the guild header/query to select another server.
+
+## Resources and activity
+
+Application limits keep caches, downloads, database pooling, game sessions and bulk work bounded. CPU/RAM/storage quotas are enforced by Wispbyte, not by JavaScript. A 256 MiB heap cap leaves native-buffer/runtime headroom but does not cap total RSS. Monitor actual traffic; the benchmark is an offline synthetic burst, not a sustained-CPU guarantee.
+
+Log into Wispbyte at least every **14 days** and follow current panel notices. Its homepage/plan comparison use 14 days, while some older KB text says monthly. Community guidance also reports sustained-CPU stops below the 35% quota, so avoid frequent dependency reinstalls and media processing. The included systemd unit is for a separate Linux host, not Wispbyte.
+
+Sources checked for the original deployment work:
 
 - [Wispbyte free-tier specifications](https://wispbyte.com/blog/free-hosting-comparison)
-- [Wispbyte homepage and activity requirement](https://wispbyte.com/)
-- [Wispbyte startup and file management](https://wispbyte.com/kb/server-management)
+- [Wispbyte homepage/activity requirement](https://wispbyte.com/)
+- [Startup and file management](https://wispbyte.com/kb/server-management)
 - [Community guidance on sustained CPU](https://wispbyte.com/community/t/693840af-7e56-443a-b07b-400ed29f1646)

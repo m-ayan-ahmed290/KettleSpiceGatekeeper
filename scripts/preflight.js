@@ -4,7 +4,6 @@ const checks = [
   ['Node.js 22 or newer', Number(process.versions.node.split('.')[0]) >= 22],
   ['Discord token configured', Boolean(process.env.DISCORD_TOKEN || config.token)],
   ['Remote MongoDB configured', /^mongodb(?:\+srv)?:\/\//.test(process.env.MONGODB_URI || config.mongoURL || '')],
-  ['Primary guild configured', /^\d{17,20}$/.test(config.guildId || '')],
 ];
 for (const [label, okay] of checks) console.log(`${okay ? 'OK' : 'MISSING'}: ${label}`);
 console.log(process.env.BOT_API_SECRET ? 'OK: Dashboard secret configured' : 'INFO: Dashboard endpoints disabled until BOT_API_SECRET is configured');

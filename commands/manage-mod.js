@@ -1,6 +1,6 @@
-const { SlashCommandBuilder } = require(`@discordjs/builders`);
-const { emoji } = require(`../data/emojis.json`);
-const { Permissions } = require("discord.js");
+const { SlashCommandBuilder } = require(`discord.js`);
+const { emojiForGuild } = require("../utilities/emojis");
+const { PermissionsBitField } = require("discord.js");
 const creditSchema = require(`../schemas/credits`);
 
 module.exports = {
@@ -76,24 +76,17 @@ module.exports = {
             .setRequired(true)
         )
     )
-    .setDefaultMemberPermissions(Permissions.FLAGS.BAN_MEMBERS),
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator),
 
   async execute(interaction) {
-    if (interaction.user.id !== `648146589814095893`) {
-      return interaction.reply({
-        content: `${emoji.failure} You do not have permission to use this command`,
-        ephemeral: true,
-      });
-    }
-
     const subcommand = interaction.options.getSubcommand();
     const moderator = interaction.options.getUser(`moderator`);
     const modId = moderator.id;
-    const creditUser = await creditSchema.findOne({ UserID: modId }).select("UserID Credits Blocked").lean();
+    const creditUser = await creditSchema.findOne({ GuildID: interaction.guild.id, UserID: modId }).select("UserID Credits Blocked").lean();
 
     if (!creditUser) {
       return interaction.reply({
-        content: `${emoji.failure} This user does not exist in the database!`,
+        content: `${emojiForGuild(interaction.guild.id).failure} This user does not exist in the database!`,
         ephemeral: true,
       });
     }
@@ -101,11 +94,11 @@ module.exports = {
     if (subcommand === `block`) {
       const reason = interaction.options.getString(`reason`);
       await creditSchema.updateOne(
-        { UserID: modId },
+        { GuildID: interaction.guild.id, UserID: modId },
         { $set: { Blocked: true, Reason: reason } }
       );
       return interaction.reply({
-        content: `${emoji.success} ${moderator.username} has been blocked from gaining credits.`,
+        content: `${emojiForGuild(interaction.guild.id).success} ${moderator.username} has been blocked from gaining credits.`,
         ephemeral: true,
       });
     }
@@ -113,16 +106,16 @@ module.exports = {
     if (subcommand === `unblock`) {
       if (!creditUser.Blocked) {
         return interaction.reply({
-          content: `${emoji.failure} ${moderator.username} is not credit-blocked!`,
+          content: `${emojiForGuild(interaction.guild.id).failure} ${moderator.username} is not credit-blocked!`,
           ephemeral: true,
         });
       }
       await creditSchema.updateOne(
-        { UserID: modId },
+        { GuildID: interaction.guild.id, UserID: modId },
         { $set: { Blocked: false, Reason: "" } }
       );
       return interaction.reply({
-        content: `${emoji.success} ${moderator.username} has been unblocked from their credit-block!`,
+        content: `${emojiForGuild(interaction.guild.id).success} ${moderator.username} has been unblocked from their credit-block!`,
         ephemeral: true,
       });
     }
@@ -169,7 +162,7 @@ module.exports = {
           Credit: `${opn}${amount}`,
         };
 
-        const query = { UserID: modId };
+        const query = { GuildID: interaction.guild.id, UserID: modId };
         if (action === "decrease") query.Credits = { $gte: amount };
         const change = action === "set" ? { $set: { Credits: amount } }
           : { $inc: { Credits: action === "increase" ? amount : -amount } };
@@ -179,13 +172,13 @@ module.exports = {
         updatedCredits = updated.Credits;
 
         return interaction.reply({
-          content: `${emoji.success} Updated ${moderator.username}'s credits to ${updatedCredits}!`,
+          content: `${emojiForGuild(interaction.guild.id).success} Updated ${moderator.username}'s credits to ${updatedCredits}!`,
           ephemeral: true,
         });
       } catch (error) {
         console.error(`Error in subcommand >manage-mod credits.js\n`, error);
         return interaction.reply({
-          content: `${emoji.failure} An error occurred while managing credits.`,
+          content: `${emojiForGuild(interaction.guild.id).failure} An error occurred while managing credits.`,
           ephemeral: true,
         });
       }

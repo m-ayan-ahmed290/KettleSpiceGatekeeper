@@ -1,10 +1,10 @@
-const { SlashCommandBuilder } = require("@discordjs/builders");
-const { Permissions } = require("discord.js");
+const { SlashCommandBuilder } = require("discord.js");
+const { PermissionsBitField } = require("discord.js");
 const BlockWords = require("../schemas/blockWordsSchema");
 const { invalidate } = require("../utilities/blockedWords");
 module.exports = {
   data: new SlashCommandBuilder().setName("block-words").setDescription("Manage the moderation word and phrase blocklist.")
-    .setDefaultMemberPermissions(Permissions.FLAGS.MANAGE_MESSAGES)
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages)
     .addSubcommand(s => s.setName("add").setDescription("Block a word or phrase.")
       .addStringOption(o => o.setName("word").setDescription("Word or phrase to block.").setRequired(true).setMaxLength(100)))
     .addSubcommand(s => s.setName("remove").setDescription("Remove a word or phrase.")
@@ -16,20 +16,22 @@ module.exports = {
     const sub = interaction.options.getSubcommand();
     if (sub === "list") {
       const page = interaction.options.getInteger("page") || 1;
-      const words = await BlockWords.find().select("BlockWord -_id").sort({ BlockWord: 1 }).skip((page - 1) * 20).limit(20).lean();
+      const words = await BlockWords.find({ GuildID: interaction.guild.id }).select("BlockWord -_id").sort({ BlockWord: 1 }).skip((page - 1) * 20).limit(20).lean();
       return interaction.editReply({ content: words.length ? `Blocked words — page ${page}\n` + words.map(w => w.BlockWord).join("\n").slice(0, 1800) : "No blocked words on this page.", allowedMentions: { parse: [] } });
     }
     const word = interaction.options.getString("word").trim().toLowerCase();
     if (!word) return interaction.editReply({ content: "Enter a nonempty word or phrase." });
     let content;
     if (sub === "add") {
-      if (await BlockWords.exists({ BlockWord: word })) content = "That word is already blocked.";
-      else { await BlockWords.create({ BlockWord: word }); content = "✅ Word or phrase blocked."; }
+      if (await BlockWords.exists({ GuildID: interaction.guild.id, BlockWord: word })) content = "That word is already blocked.";
+      else {
+        if (await BlockWords.countDocuments({ GuildID: interaction.guild.id }) >= 1000) return interaction.editReply("This server has reached its 1,000-word limit. Remove an entry first.");
+        await BlockWords.create({ GuildID: interaction.guild.id, BlockWord: word }); content = "✅ Word or phrase blocked."; }
     } else {
-      const result = await BlockWords.deleteOne({ BlockWord: word });
+      const result = await BlockWords.deleteOne({ GuildID: interaction.guild.id, BlockWord: word });
       content = result.deletedCount ? "✅ Word or phrase removed." : "That word is not blocked.";
     }
-    invalidate();
+    invalidate(interaction.guild.id);
     return interaction.editReply({ content });
   },
 };

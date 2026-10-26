@@ -1,11 +1,11 @@
-const { SlashCommandBuilder } = require("@discordjs/builders");
-const { MessageEmbed } = require("discord.js");
+const { SlashCommandBuilder } = require("discord.js");
+const { EmbedBuilder } = require("discord.js");
 module.exports = {
   data: new SlashCommandBuilder().setName("serverinfo").setDescription("Show this server's information without fetching all members."),
   async execute(interaction) {
     const guild = interaction.guild;
-    const embed = new MessageEmbed().setTitle(guild.name).setColor("BLURPLE")
-      .setThumbnail(guild.iconURL({ dynamic: true })).addFields(
+    const embed = new EmbedBuilder().setTitle(guild.name).setColor(0x5865f2)
+      .setThumbnail(guild.iconURL({})).addFields(
         { name: "Members", value: String(guild.memberCount), inline: true },
         { name: "Channels", value: String(guild.channels.cache.size), inline: true },
         { name: "Roles", value: String(guild.roles.cache.size), inline: true },

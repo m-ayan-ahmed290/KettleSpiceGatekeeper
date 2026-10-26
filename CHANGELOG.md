@@ -1,3 +1,11 @@
+# 3.0.0
+
+- Upgrade to discord.js 14.27.0, Express 5.3.0 and Mongoose 8.24.7; remove unused Moment, old builders, node-fetch and nodemon dependency chains. Full npm audit reports zero vulnerabilities at validation time; CI audits every release.
+- Make settings, role rules, moderation logs, credits/blocks/history, birthdays, words, ships, banners and strikes independent per guild. Add administrator-only `/setup`.
+- Preserve Kettle defaults through exact-guild presets and copy old collections into new guild-aware collections without clearing or overwriting originals. Stop on ambiguous legacy identities. Document preservation and rollback limits in KETTLE_SETUP.md.
+- Add solo Tic Tac Toe, number guessing, rock-paper-scissors, versus Connect Four and cooperative dungeon combat, plus per-server arcade statistics. Retain original profile statistics.
+- Make the default `node index.js` startup apply the heap cap. Update Wispbyte Git-sync/dependency-refresh instructions and bundle all new runtime modules/presets.
+
 # 2.1.0
 
 - Keep all original commands; add help, persistent personal reminders, reaction polls, message cleanup, slowmode and server information.

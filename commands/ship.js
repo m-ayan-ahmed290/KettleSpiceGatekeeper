@@ -10,9 +10,9 @@
  *    "alicebob" don't produce two different affinity scores.
  */
 
-const { SlashCommandBuilder } = require("@discordjs/builders");
-const { MessageEmbed } = require("discord.js");
-const { emoji } = require("../data/emojis.json");
+const { SlashCommandBuilder } = require("discord.js");
+const { EmbedBuilder } = require("discord.js");
+const { emojiForGuild } = require("../utilities/emojis");
 const shipSchema = require("../schemas/shipSchema");
 
 const BANNED_WORDS = [
@@ -68,10 +68,10 @@ module.exports = {
 
       // ── Ship logic ───────────────────────────────────────────────────────
       const shipName  = generateShipName(person1, person2);
-      const affinity  = await getOrCreateAffinity(shipName);
-      const { quality, progressBar } = getShipQualityData(affinity);
+      const affinity  = await getOrCreateAffinity(shipName, interaction.guild.id);
+      const { quality, progressBar } = getShipQualityData(affinity, interaction.guild.id);
 
-      const embed = new MessageEmbed()
+      const embed = new EmbedBuilder()
         .setColor("#F8C300")
         .setTitle("💕 Ship Compatibility")
         .setDescription(`**${person1}** is \`${affinity}%\` compatible with **${person2}**!`)
@@ -79,7 +79,7 @@ module.exports = {
           { name: "🚢 Ship Name",     value: `\`${shipName}\``,                    inline: false },
           { name: "💖 Ship Strength", value: `${quality}\n${progressBar} \`${affinity}%\``, inline: false }
         )
-        .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
+        .setThumbnail(interaction.user.displayAvatarURL({}))
         .setFooter({ text: "Ship results are fictional and do not depict real relationships!" })
         .setTimestamp();
 
@@ -133,7 +133,7 @@ async function parseUserInput(input, interaction) {
   const match = input?.match(/^<@!?(\d+)>$/);
   if (match) {
     try {
-      const m = await interaction.guild.members.fetch(match[1]);
+      const m = await interaction.guild.members.members.fetch(match[1]);
       return m.displayName ?? m.user.username;
     } catch {
       try {
@@ -164,12 +164,12 @@ function generateShipName(p1, p2) {
   return `${a.slice(0, Math.floor(a.length / 2))}${b.slice(Math.floor(b.length / 2))}`;
 }
 
-async function getOrCreateAffinity(shipName) {
+async function getOrCreateAffinity(shipName, guildId) {
   try {
-    const existing = await shipSchema.findOne({ ShipName: shipName });
+    const existing = await shipSchema.findOne({ GuildID: guildId, ShipName: shipName });
     if (existing) return existing.ShipStr;
     const affinity = Math.floor(Math.random() * 101);
-    await shipSchema.create({ ShipName: shipName, ShipStr: affinity });
+    await shipSchema.create({ GuildID: guildId, ShipName: shipName, ShipStr: affinity });
     return affinity;
   } catch (err) {
     console.error("[Ship] DB error:", err);
@@ -177,7 +177,8 @@ async function getOrCreateAffinity(shipName) {
   }
 }
 
-function getShipQualityData(affinity) {
+function getShipQualityData(affinity, guildId) {
+  const emoji = emojiForGuild(guildId);
   const range = SHIP_QUALITY_RANGES.find((r) => affinity >= r.min && affinity <= r.max)
     ?? SHIP_QUALITY_RANGES[SHIP_QUALITY_RANGES.length - 1];
 

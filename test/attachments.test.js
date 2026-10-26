@@ -2,12 +2,12 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 let release;
 let downloads = 0;
-const fetchPath = require.resolve("node-fetch");
-require.cache[fetchPath] = { id: fetchPath, filename: fetchPath, loaded: true, exports: async () => {
+const fetchPath = require.resolve("../utilities/download");
+require.cache[fetchPath] = { id: fetchPath, filename: fetchPath, loaded: true, exports: { downloadBuffer: async () => {
   downloads++;
   await new Promise(resolve => { const previous = release; release = () => { previous?.(); resolve(); }; });
-  return { ok: true, buffer: async () => Buffer.alloc(1024) };
-} };
+  return Buffer.alloc(1024);
+} } };
 const cache = require("../utilities/attachmentCache");
 function message(id, size = 1024) { return { id, attachments: new Map([["a", { name: "a.png", contentType: "image/png", size, url: "https://example.test/a" }]]) }; }
 test("attachment burst bounds concurrent downloads, entries, and reserved bytes", async () => {

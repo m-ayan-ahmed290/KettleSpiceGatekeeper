@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require("@discordjs/builders");
+const { SlashCommandBuilder } = require("discord.js");
 const Reminder = require("../schemas/reminder");
 const { createReminder } = require("../utilities/reminders");
 module.exports = {

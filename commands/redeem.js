@@ -9,26 +9,26 @@
  *    replaced with building the description string before constructing the embed
  */
 
-const { SlashCommandBuilder } = require("@discordjs/builders");
-const { MessageEmbed, Permissions, MessageButton, MessageActionRow } = require("discord.js");
+const { SlashCommandBuilder } = require("discord.js");
+const { EmbedBuilder, PermissionsBitField, ButtonBuilder, ActionRowBuilder } = require("discord.js");
 const imgLinks = require("../schemas/imgLinks");
-const { emoji } = require("../data/emojis.json");
+const { emojiForGuild } = require("../utilities/emojis");
 
 const GAMES = {
   "genshin-impact": {
-    title:   "KTG | Genshin Impact Redeem Codes",
+    title:   "Genshin Impact Redeem Codes",
     redeemUrl: "https://genshin.hoyoverse.com/en/gift",
     codeUrl:   (code) => `https://genshin.hoyoverse.com/en/gift?code=${encodeURIComponent(code)}`,
     imageKey: "genshin",
   },
   "star-rail": {
-    title:   "KTG | Honkai: Star Rail Redeem Codes",
+    title:   "Honkai: Star Rail Redeem Codes",
     redeemUrl: "https://hsr.hoyoverse.com/gift",
     codeUrl:   (code) => `https://hsr.hoyoverse.com/gift?code=${encodeURIComponent(code)}`,
     imageKey: "hsr",
   },
   "zenless": {
-    title:   "KTG | Zenless Zone Zero Redeem Codes",
+    title:   "Zenless Zone Zero Redeem Codes",
     redeemUrl: "https://zenless.hoyoverse.com/redemption",
     codeUrl:   (code) => `https://zenless.hoyoverse.com/redemption?code=${encodeURIComponent(code)}`,
     imageKey: "zzz",
@@ -59,7 +59,7 @@ module.exports = {
         .addBooleanOption(pinOption())
         .addChannelOption(channelOption())
     )
-    .setDefaultMemberPermissions(Permissions.FLAGS.MANAGE_MESSAGES),
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages),
 
   async execute(interaction) {
     const subcmd = interaction.options.getSubcommand();
@@ -84,31 +84,31 @@ module.exports = {
 
     // Fetch image links
     await interaction.deferReply({ ephemeral: true });
-    const links = await getImageLinks() || {};
+    const links = await getImageLinks(interaction.guild.id) || {};
 
-    await interaction.editReply({ content: `${emoji.loading} Sending...` });
+    await interaction.editReply({ content: `${emojiForGuild(interaction.guild.id).loading} Sending...` });
 
     try {
       // Build description
       const codeLines = codes.map((code, i) => {
-        const bp = emoji[BULLET_EMOJIS[i % BULLET_EMOJIS.length]];
+        const bp = emojiForGuild(interaction.guild.id)[BULLET_EMOJIS[i % BULLET_EMOJIS.length]];
         return `${bp} \`${code}\` — [Redeem](${game.codeUrl(code)})`;
       });
 
       const description =
-        `${emoji.bp3} [Official Redeem Page](${game.redeemUrl})\n` +
-        `${emoji.bp5} Codes expire quickly — redeem ASAP!\n\n` +
+        `${emojiForGuild(interaction.guild.id).bp3} [Official Redeem Page](${game.redeemUrl})\n` +
+        `${emojiForGuild(interaction.guild.id).bp5} Codes expire quickly — redeem ASAP!\n\n` +
         codeLines.join("\n");
 
-      const embed = new MessageEmbed()
+      const embed = new EmbedBuilder()
         .setTitle(game.title)
-        .setColor("BLURPLE")
+        .setColor(0x5865f2)
         .setDescription(description)
         .setImage(links[game.imageKey])
-        .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
+        .setThumbnail(interaction.user.displayAvatarURL({}))
         .setFooter({
-          text: "Kettle's Tea Garden",
-          iconURL: interaction.guild.iconURL({ dynamic: true }),
+          text: interaction.guild.name,
+          iconURL: interaction.guild.iconURL({}),
         })
         .setTimestamp();
 
@@ -116,11 +116,11 @@ module.exports = {
       const rows = [];
       for (let i = 0; i < codes.length; i += 3) {
         const batch   = codes.slice(i, i + 3);
-        const btnRow  = new MessageActionRow().addComponents(
+        const btnRow  = new ActionRowBuilder().addComponents(
           batch.map((code) =>
-            new MessageButton()
+            new ButtonBuilder()
               .setLabel(code)
-              .setStyle("LINK")
+              .setStyle(5)
               .setURL(game.codeUrl(code))
           )
         );
@@ -135,11 +135,11 @@ module.exports = {
       }
 
       const summary = codes
-        .map((c, i) => `${emoji[BULLET_EMOJIS[i % BULLET_EMOJIS.length]]} ${c}`)
+        .map((c, i) => `${emojiForGuild(interaction.guild.id)[BULLET_EMOJIS[i % BULLET_EMOJIS.length]]} ${c}`)
         .join("\n");
 
       await interaction.editReply({
-        content: `${emoji.success} Done!\n\n${summary}\n\n${emoji.bp4} **Channel:** ${channel}`,
+        content: `${emojiForGuild(interaction.guild.id).success} Done!\n\n${summary}\n\n${emojiForGuild(interaction.guild.id).bp4} **Channel:** ${channel}`,
       });
     } catch (error) {
       console.error("[Redeem] Error:", error);
@@ -174,9 +174,9 @@ function channelOption() {
 
 // ─── DB helper ────────────────────────────────────────────────────────────────
 
-async function getImageLinks() {
+async function getImageLinks(guildId) {
   try {
-    const doc = await imgLinks.findOne({});
+    const doc = await imgLinks.findOne({ GuildID: guildId });
     if (!doc) return null;
     return { genshin: doc.Genshin, hsr: doc.HSR, zzz: doc.ZZZ };
   } catch (err) {

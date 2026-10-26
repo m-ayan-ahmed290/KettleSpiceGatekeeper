@@ -11,15 +11,8 @@
  *     (Timeouts are still credited via the audit log — see events/auditLog.js.)
  */
 
-const { MessageEmbed } = require("discord.js");
-const {
-  modChId,
-  guildId,
-  restrictedChId,
-  carlBotId,
-  ticketChId,
-  ticketsBotId,
-} = require("../config.json");
+const { EmbedBuilder } = require("discord.js");
+const { getGuildSettings, guildChannel } = require("../utilities/guildSettings");
 const client = require("../utilities/client");
 const { cacheMessageAttachments } = require("../utilities/attachmentCache");
 const { awardCredits } = require("../utilities/awardCredits");
@@ -90,7 +83,12 @@ module.exports = {
   once: false,
 
   async execute(message) {
+    if (!message.guild || !message.author) return;
+    const settings = await getGuildSettings(message.guild.id);
+    const { restricted: restrictedChId, moderation: modChId } = settings.channels;
+    const { carlBotId, ticketsBotId, ticketChannelId: ticketChId } = settings.integrations;
     if (message.author.bot) {
+      if (!settings.features.credits || !client.dataReady) return;
       try {
         if (
           message.channel.id === modChId &&
@@ -114,17 +112,17 @@ module.exports = {
     if (!message.guild) return;
 
     // Get mod channel early for alerts
-    const modChannel = client.channels.cache.get(modChId);
+    const modChannel = await guildChannel(message.guild, modChId);
 
     // 1. Cache media only for guilds with a configured deletion log
-    if (message.attachments.size > 0 && require("../data/log-channel.json").log_channel[message.guild.id]) {
+    if (message.attachments.size > 0 && settings.channels.deleted) {
       cacheMessageAttachments(message).catch((err) =>
         console.error("[MessageCreate] Attachment pre-cache error:", err),
       );
     }
 
     // 2. Commission filter — only for the configured guild
-    if (message.guild.id !== guildId) return;
+
     if (
       MONITORED_CHANNEL_IDS.size > 0 &&
       !MONITORED_CHANNEL_IDS.has(message.channel.id)
@@ -132,8 +130,8 @@ module.exports = {
       return;
 
     const lower = message.content.toLowerCase();
-    const isSpam = isCommissionSpam(lower);
-    if (message.channel.id !== restrictedChId && await containsBlockedWord(lower)) {
+    const isSpam = settings.features.commission && isCommissionSpam(lower);
+    if (message.channel.id !== restrictedChId && await containsBlockedWord(lower, message.guild.id)) {
       await message.delete().catch(error => console.warn("[BlockWords]", error.message));
       return;
     }
@@ -163,7 +161,7 @@ module.exports = {
 
         try {
           const textChannels = message.guild.channels.cache.filter(
-            (ch) => ch.type === "GUILD_TEXT" && ch.viewable,
+            (ch) => ch.type === 0 && ch.viewable,
           );
 
           // Process channels sequentially to bound requests and memory
@@ -203,12 +201,12 @@ module.exports = {
           );
         }
 
-        const embed = new MessageEmbed()
+        const embed = new EmbedBuilder()
           .setColor("#FF6600")
           .setTitle("Message sent in restricted channel")
           .setAuthor({
             name: `${member.user.tag} (${member.user.id})`,
-            iconURL: member.user.displayAvatarURL({ dynamic: true }),
+            iconURL: member.user.displayAvatarURL({}),
           })
           .addFields(
             { name: "Channel", value: `${message.channel}`, inline: true },
@@ -222,7 +220,7 @@ module.exports = {
           )
           .setFooter({
             text: "User timed out 24 h — mods can lift it anytime.",
-            iconURL: message.guild.iconURL({ dynamic: true }),
+            iconURL: message.guild.iconURL({}),
           })
           .setTimestamp();
         if (modChannel) await modChannel.send({ embeds: [embed] });
@@ -286,12 +284,12 @@ module.exports = {
     if (!modChannel) return;
 
     try {
-      const embed = new MessageEmbed()
+      const embed = new EmbedBuilder()
         .setColor("#FF6600")
         .setTitle("🚨 Commission Spam Detected")
         .setAuthor({
           name: `${member.user.tag} (${member.user.id})`,
-          iconURL: member.user.displayAvatarURL({ dynamic: true }),
+          iconURL: member.user.displayAvatarURL({}),
         })
         .addFields(
           { name: "Channel", value: `${message.channel}`, inline: true },
@@ -306,7 +304,7 @@ module.exports = {
         )
         .setFooter({
           text: "User timed out 24 h — mods can lift it anytime.",
-          iconURL: message.guild.iconURL({ dynamic: true }),
+          iconURL: message.guild.iconURL({}),
         })
         .setTimestamp();
       if (modChannel) await modChannel.send({ embeds: [embed] });
@@ -421,6 +419,7 @@ async function handleCarlBotModLog(message) {
   }
 
   await awardCredits({
+    guildId: message.guild.id,
     userId: resolved.id,
     username: resolved.username,
     credits: actionConfig.credits,
@@ -457,6 +456,7 @@ async function handleTicketClose(message) {
   }
 
   await awardCredits({
+    guildId: message.guild.id,
     userId,
     username,
     credits: TICKET_CLOSE_CREDITS,
@@ -464,3 +464,5 @@ async function handleTicketClose(message) {
     sourceId: message.id,
   });
 }
+
+module.exports.isCommissionSpam = isCommissionSpam;

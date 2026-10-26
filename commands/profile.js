@@ -1,5 +1,5 @@
-const { SlashCommandBuilder } = require("@discordjs/builders");
-const { MessageActionRow, MessageButton } = require("discord.js");
+const { SlashCommandBuilder } = require("discord.js");
+const { ActionRowBuilder, ButtonBuilder } = require("discord.js");
 const Profile = require("../schemas/Profile.js");
 
 module.exports = {
@@ -50,7 +50,7 @@ module.exports = {
       return {
         title: `${user.username}'s Profile`,
         color: 0x3498db,
-        thumbnail: { url: user.displayAvatarURL({ dynamic: true }) },
+        thumbnail: { url: user.displayAvatarURL({}) },
         fields: [
           { name: "Points", value: `${profile.Points}`, inline: true },
           {
@@ -65,7 +65,7 @@ module.exports = {
         ],
         footer: {
           text: `Requested by ${interaction.user.username}`,
-          icon_url: interaction.user.displayAvatarURL({ dynamic: true }),
+          icon_url: interaction.user.displayAvatarURL({}),
         },
         timestamp: new Date().toISOString(),
       };
@@ -126,11 +126,11 @@ module.exports = {
     }
 
     if (sub === "delete") {
-      const row = new MessageActionRow().addComponents(
-        new MessageButton()
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
           .setCustomId("confirm_delete_profile")
           .setLabel("Confirm Delete")
-          .setStyle("DANGER")
+          .setStyle(4)
       );
 
       await interaction.reply({

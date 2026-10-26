@@ -1,0 +1,103 @@
+{
+  "primaryGuildId": "929058650532757514",
+  "guilds": {
+    "929058650532757514": {
+      "brand": "Kettle's Tea Garden",
+      "features": {
+        "commission": true,
+        "credits": true,
+        "egg": true,
+        "birthdays": true,
+        "roles": false
+      },
+      "channels": {
+        "moderation": "987057720119136356",
+        "deleted": "1003328162408710165",
+        "media": "1184557200480403487",
+        "birthdayVip": "981568443469955172",
+        "birthdayStandard": "1005507469864345772",
+        "restricted": "1497519020927352872",
+        "status": ""
+      },
+      "birthday": {
+        "vipRoles": [],
+        "vipRoleNames": [
+          "Moderator",
+          "Basement Dwellers"
+        ],
+        "eligibleRoles": [
+          "939596568288456755",
+          "1009015548488712242"
+        ],
+        "allowEveryone": false
+      },
+      "integrations": {
+        "carlBotId": "235148962103951360",
+        "ticketsBotId": "1325579039888511056",
+        "ticketChannelId": "1125114870271062086"
+      },
+      "roles": [],
+      "blockedGameUsers": [
+        "295289522265260032",
+        "263238337358331904"
+      ]
+    },
+    "1105487617690177658": {
+      "brand": "Kettle's Tea Garden",
+      "features": {
+        "commission": false,
+        "credits": false,
+        "egg": true,
+        "birthdays": true,
+        "roles": true
+      },
+      "channels": {
+        "moderation": "1105487618189295686",
+        "deleted": "1105487618189295687",
+        "media": "1184557200480403487",
+        "birthdayVip": "1105487617740509258",
+        "birthdayStandard": "1105487618365472861",
+        "restricted": "",
+        "status": "1105487618189295686"
+      },
+      "roles": [
+        {
+          "sources": [
+            "Twitch Tier 1",
+            "YT Member Tier 1"
+          ],
+          "target": "Smol Teabag Tier 1"
+        },
+        {
+          "sources": [
+            "Twitch Tier 2",
+            "YT Member Tier 2"
+          ],
+          "target": "Mega Teabag Tier 2"
+        },
+        {
+          "sources": [
+            "Twitch Tier 3"
+          ],
+          "target": "Venti Teabag Tier 3"
+        }
+      ],
+      "birthday": {
+        "vipRoles": [],
+        "vipRoleNames": [
+          "Moderator",
+          "Basement Dwellers"
+        ],
+        "eligibleRoles": [
+          "939596568288456755",
+          "1009015548488712242"
+        ],
+        "allowEveryone": false
+      },
+      "blockedGameUsers": [
+        "295289522265260032",
+        "263238337358331904"
+      ]
+    }
+  }
+}

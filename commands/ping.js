@@ -2,8 +2,8 @@
  * ping.js — Bot health stats: latency, uptime, memory, attachment cache size.
  */
 
-const { SlashCommandBuilder } = require("@discordjs/builders");
-const { MessageEmbed } = require("discord.js");
+const { SlashCommandBuilder } = require("discord.js");
+const { EmbedBuilder } = require("discord.js");
 const { resourceStats } = require("../utilities/resourceStats");
 const { cacheSize } = require("../utilities/attachmentCache");
 
@@ -20,7 +20,7 @@ module.exports = {
       const mem                = process.memoryUsage();
       const resources = resourceStats();
 
-      const embed = new MessageEmbed()
+      const embed = new EmbedBuilder()
         .setTitle("🏓 Pong!")
         .setColor("#00e5ff")
         .addFields(
@@ -33,10 +33,10 @@ module.exports = {
           { name: "Attachment Memory", value: `${mb(resources.attachments.bytes)} / 24 MB`, inline: true },
           { name: "📦 Cached Msgs",       value: `${cacheSize()}`,           inline: true },
         )
-        .setThumbnail(interaction.user.avatarURL({ dynamic: true }))
+        .setThumbnail(interaction.user.displayAvatarURL({}))
         .setFooter({
-          text: "Kettle's Tea Garden",
-          iconURL: interaction.guild.iconURL({ dynamic: true }),
+          text: interaction.guild.name,
+          iconURL: interaction.guild.iconURL({}),
         })
         .setTimestamp();
 

@@ -1,20 +1,21 @@
 const BlockWords = require("../schemas/blockWordsSchema");
-let words = [];
-let expires = 0;
-let loading;
-function invalidate() { expires = 0; }
-async function containsBlockedWord(text) {
-  if (Date.now() >= expires) {
-    if (!loading) loading = BlockWords.find().select("BlockWord -_id").lean().then(rows => {
-      words = rows.map(row => row.BlockWord?.trim().toLowerCase()).filter(Boolean);
-      expires = Date.now() + 60_000;
+const cache = new Map(), loading = new Map();
+function invalidate(guildId) { cache.delete(guildId); }
+async function containsBlockedWord(text, guildId) {
+  if (!guildId) return false;
+  let record = cache.get(guildId);
+  if (!record || record.until <= Date.now()) {
+    if (!loading.has(guildId)) loading.set(guildId, BlockWords.find({ GuildID: guildId }).select("BlockWord -_id").limit(1000).lean().then(rows => {
+      const words = rows.map(row => row.BlockWord?.trim().toLowerCase()).filter(Boolean);
+      if (cache.size >= 100) cache.delete(cache.keys().next().value);
+      const item = { words, until: Date.now() + 60_000 }; cache.set(guildId, item); return item;
     }).catch(error => {
       console.warn("[BlockWords]", error.message);
-      expires = Date.now() + 10_000;
-    }).finally(() => { loading = null; });
-    await loading;
+      const item = { words: record?.words || [], until: Date.now() + 10_000 }; cache.set(guildId, item); return item;
+    }).finally(() => loading.delete(guildId)));
+    record = await loading.get(guildId);
   }
-  return words.some(word => {
+  return record.words.some(word => {
     let from = 0, index;
     while ((index = text.indexOf(word, from)) !== -1) {
       const before = text[index - 1], after = text[index + word.length];

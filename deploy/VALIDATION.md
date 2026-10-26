@@ -1,12 +1,9 @@
-# Offline validation — 26 October 2026
+# 3.0.0 validation — 26 October 2026
 
-- All existing command definitions and the new `/help` command loaded successfully.
-- JavaScript syntax checks pass.
-- **29 regression tests pass**, using mocked Discord/MongoDB and in-process Express requests.
-- Synthetic attachment benchmark loaded all command modules and processed 250 sequential 8 MiB attachments: peak observed RSS **338.3 MiB**, cache **24 MiB**. This is one observed run, not a worst-case ceiling or production load certification.
-- Source plus installed development dependencies occupied approximately **52 MB**; installed dependencies alone approximately **51 MB**.
-- systemd unit validation could not run in this managed environment (`SO_PASSCRED` is unavailable). Review/install the unit on the target Linux host.
-- CPU quota, total memory limit and storage quota were not applied to this environment. Use the supplied service/container settings on the target server. The synthetic benchmark intentionally runs a burst and does not establish sustained CPU utilization.
-- Live Discord functionality, MongoDB index creation and production traffic remain unverified because no live credentials are configured.
-
-The 2.1.0 Wispbyte bundle installs only production dependencies and excludes `.env`, `.git`, caches and historical Git contents. Current config credentials are blank; existing local credentials were moved to the ignored `.env`. Package size and extraction/load checks are recorded in the release manifest.
+- Full npm audit: **0 vulnerabilities** across all installed dependencies; no advisories suppressed. See `security-audit.json`. CI runs the audit before publishing.
+- **58 regression tests** pass, covering existing command definitions, permission checks, Discord 14 component serialization, per-server settings/credit/API identities, copy migration, birthday deduplication, game engines/turns/consent/cleanup, reminders, bounded native downloads and attachment bursts.
+- All JavaScript syntax checks pass. No production Discord or MongoDB login/mutation is used in these offline tests.
+- Synthetic attachment benchmark loads all command modules and processes 250 sequential 8 MiB attachments: peak observed application RSS **346.1 MiB**, attachment cache **24 MiB**. This is one observed workload, not a worst-case ceiling or sustained-CPU certification.
+- Production packaging uses the lockfile, includes runtime modules/presets/dependencies, and excludes `.env`, `.git`, caches and historical Git content. Archives are CRC/checksum tested and the extracted bundle is tested separately.
+- Host CPU/RAM/storage quotas are not applied to this development environment. Use Wispbyte's limits and monitor real traffic. The systemd unit is for a separate Linux host and cannot be validated here because SO_PASSCRED is unavailable.
+- Live Discord permissions, actual legacy MongoDB records/indexes and post-migration balances still require verification on the target server using the backup/checklist in KETTLE_SETUP.md.

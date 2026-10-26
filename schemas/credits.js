@@ -1,21 +1,9 @@
-const { Schema, model } = require(`mongoose`);
-
-const actionSchema = new Schema({
-  Date: { type: Date, default: () => new Date() },
-  ActionReason: String,
-  Credit: String,
-});
-
-const creditSchema = new Schema({
-  Username: String,
-  UserID: { type: String, unique: true, sparse: true },
+const { Schema, model } = require("mongoose");
+const schema = new Schema({ GuildID: { type: String, required: true }, UserID: { type: String, required: true },
+  Username: String, Credits: { type: Number, default: 0 }, Blocked: { type: Boolean, default: false }, Reason: String,
   RecentSources: { type: [String], default: [], select: false },
-  Credits: { type: Number, default: 0 },
-  Blocked: Boolean,
-  Reason: String,
-  Action: [actionSchema],
+  Action: [{ Date: { type: Date, default: Date.now }, ActionReason: String, Credit: String }],
 });
-
-creditSchema.index({ Credits: -1 });
-
-module.exports = model(`creditSchema`, creditSchema);
+schema.index({ GuildID: 1, UserID: 1 }, { unique: true });
+schema.index({ GuildID: 1, Credits: -1 });
+module.exports = model("GuildCredit", schema, "guildcredits");

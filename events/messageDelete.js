@@ -14,14 +14,14 @@
  * offline when it was sent, or it's a partial), we note that gracefully.
  */
 
-const { MessageEmbed, MessageAttachment } = require("discord.js");
-const { log_channel } = require("../data/log-channel.json");
+const { EmbedBuilder, AttachmentBuilder } = require("discord.js");
+const { getGuildSettings, guildChannel } = require("../utilities/guildSettings");
 const { listToMatrix } = require("../utilities/listToMatrix");
 const { consumeCache } = require("../utilities/attachmentCache");
 const client = require("../utilities/client");
 
-const IMAGE_LOG_CHANNEL_ID = "1184557200480403487";
-const WEBHOOK_NAME         = "Kettle's Tea Garden Media Logger";
+
+const WEBHOOK_NAME         = "Community Media Logger";
 const MAX_EMBED_DESC       = 4000;
 let activeDeletes = 0;
 
@@ -39,8 +39,9 @@ module.exports = {
 async function logDeletedMessage(message) {
     if (!message.guild) return;
 
-    const logChannelId = log_channel[message.guild.id];
-    const logChannel   = client.channels.cache.get(logChannelId);
+    const settings = await getGuildSettings(message.guild.id);
+    const logChannelId = settings.channels.deleted;
+    const logChannel = await guildChannel(message.guild, logChannelId);
     if (!logChannel) {
       console.warn(`[MessageDelete] No log channel for guild ${message.guild.id}`);
       return;
@@ -57,9 +58,9 @@ async function logDeletedMessage(message) {
     const messageCtx = message.content?.trim() || "*(no text content)*";
     const authorTag  = message.author?.tag  ?? "Unknown User";
     const authorId   = message.author?.id   ?? "unknown";
-    const authorAvatar = message.author?.displayAvatarURL({ dynamic: true }) ?? null;
+    const authorAvatar = message.author?.displayAvatarURL({}) ?? null;
 
-    const imageLogCh = client.channels.cache.get(IMAGE_LOG_CHANNEL_ID) ?? null;
+    const imageLogCh = await guildChannel(message.guild, settings.channels.media);
 
     // ── Build embeds from cached attachments ────────────────────────────────
     const embeds = [];
@@ -80,7 +81,7 @@ async function logDeletedMessage(message) {
         } else {
           // We have the buffer — re-upload it
           try {
-            const file       = new MessageAttachment(att.buffer, att.name);
+            const file       = new AttachmentBuilder(att.buffer, { name: att.name });
             const target     = imageLogCh ?? logChannel;
             const uploadMsg  = await target.send({
               content: `📦 Saved from deleted message | Author: \`${authorTag}\` | Channel: ${message.channel}`,
@@ -112,7 +113,7 @@ async function logDeletedMessage(message) {
       // Compose a notice-only embed for text content at minimum
       if (message.partial) {
         // Fully uncached — we know nothing
-        const embed = new MessageEmbed()
+        const embed = new EmbedBuilder()
           .setColor("#888888")
           .setTitle("🗑️ Message Deleted (Uncached)")
           .setDescription(
@@ -124,7 +125,7 @@ async function logDeletedMessage(message) {
         embeds.push(embed);
       } else if (liveAttachmentCount > 0) {
         // Message was in Discord's cache but not our attachment cache (e.g. bot just restarted)
-        const embed = new MessageEmbed()
+        const embed = new EmbedBuilder()
           .setColor("#FF8800")
           .setAuthor({ name: authorTag, iconURL: authorAvatar })
           .setTitle("🗑️ Deleted Message — Attachment Lost")
@@ -136,7 +137,7 @@ async function logDeletedMessage(message) {
           )
           .setFooter({
             text: `Author ID: ${authorId}`,
-            iconURL: message.guild.iconURL({ dynamic: true }),
+            iconURL: message.guild.iconURL({}),
           })
           .setTimestamp();
         embeds.push(embed);
@@ -185,13 +186,13 @@ function buildEmbed({ type, att, message, messageCtx, authorTag, authorId, autho
     desc += `\n\n📂 File re-uploaded to ${imageLogCh}.`;
   }
 
-  const embed = new MessageEmbed()
+  const embed = new EmbedBuilder()
     .setColor(statusNote ? "#FF8800" : "#da0000")
     .setAuthor({ name: authorTag, iconURL: authorAvatar })
     .setDescription(desc)
     .setFooter({
       text: `Author ID: ${authorId} | File: ${att.name}`,
-      iconURL: message.guild.iconURL({ dynamic: true }),
+      iconURL: message.guild.iconURL({}),
     })
     .setTimestamp();
 
@@ -204,7 +205,7 @@ async function getOrCreateWebhook(channel, name) {
   const webhooks = await channel.fetchWebhooks();
   let wh = webhooks.find((w) => w.name === name);
   if (!wh) {
-    wh = await channel.createWebhook(name, {
+    wh = await channel.createWebhook({ name,
       avatar: "https://i.ibb.co/QvSrf3XC/meme-profile-pic.png",
     });
   }

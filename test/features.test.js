@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { Collection, Permissions } = require('discord.js');
+const { Collection, PermissionsBitField } = require('discord.js');
 const { parseDuration } = require('../utilities/duration');
 const { enterCommand } = require('../utilities/commandGuard');
 const { crc32 } = require('../scripts/package');
@@ -31,11 +31,11 @@ test('poll posts reaction choices sequentially without collectors', async () => 
   let reply;
   await require('../commands/poll').execute({
     options: { getString: name => name === 'question' ? 'Drink?' : 'Tea | Coffee' },
-    guild: { me: {} }, user: { username: 'Alice' },
+    guild: { members: { me: {} } }, user: { username: 'Alice' },
     channel: { permissionsFor: () => ({ has: () => true }) },
     reply: async p => { reply = p; return { react: async emoji => { reactions.push(emoji); } }; },
   });
-  assert.equal(reactions.length, 2); assert.match(reply.embeds[0].description, /Coffee/);
+  assert.equal(reactions.length, 2); assert.match(reply.embeds[0].toJSON().description, /Coffee/);
 });
 test('purge filters old and other-user messages before deletion', async () => {
   const recent = new Collection([
@@ -45,7 +45,7 @@ test('purge filters old and other-user messages before deletion', async () => {
   ]);
   let selected, reply;
   await require('../commands/purge').execute({
-    guild: { me: {} }, options: { getInteger: () => 10, getUser: () => ({ id: 'target', username: 'Target' }) },
+    guild: { members: { me: {} } }, options: { getInteger: () => 10, getUser: () => ({ id: 'target', username: 'Target' }) },
     deferReply: async () => {}, editReply: async p => { reply = p; },
     channel: { permissionsFor: () => ({ has: () => true }), messages: { fetch: async options => { assert.equal(options.cache, false); return recent; } },
       bulkDelete: async messages => { selected = messages; return new Collection(messages.map(m => [m.id, m])); } },
@@ -54,7 +54,7 @@ test('purge filters old and other-user messages before deletion', async () => {
 });
 test('slowmode supports disabling and verifies the bot permission', async () => {
   let seconds, reply;
-  await require('../commands/slowmode').execute({ guild: { me: {} }, user: { tag: 'Alice' }, options: { getInteger: () => 0 },
+  await require('../commands/slowmode').execute({ guild: { members: { me: {} } }, user: { tag: 'Alice' }, options: { getInteger: () => 0 },
     channel: { setRateLimitPerUser: async value => { seconds = value; }, permissionsFor: () => ({ has: () => true }) },
     deferReply: async () => {}, editReply: async p => { reply = p; } });
   assert.equal(seconds, 0); assert.match(reply.content, /disabled/);

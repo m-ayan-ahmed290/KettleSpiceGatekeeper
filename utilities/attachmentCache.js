@@ -1,5 +1,5 @@
 /** Bounded attachment recovery: buffers + in-flight reservations share one budget. */
-const fetch = require("node-fetch");
+const { downloadBuffer } = require("./download");
 const MAX_BYTES = 24 * 1024 * 1024;
 const MAX_FILE_SIZE = 8 * 1024 * 1024;
 const MAX_ENTRIES = 500;
@@ -45,9 +45,7 @@ async function cacheMessageAttachments(message) {
     reserved += MAX_FILE_SIZE;
     active++;
     try {
-      const res = await fetch(att.url, { size: MAX_FILE_SIZE, timeout: 10_000 });
-      if (!res.ok) { res.body.destroy(); throw new Error(`HTTP ${res.status}`); }
-      const buffer = await res.buffer();
+      const buffer = await downloadBuffer(att.url, MAX_FILE_SIZE);
       if (cache.get(message.id) === record) { entry.buffer = buffer; bytes += buffer.length; }
     } catch (err) {
       console.warn(`[AttachmentCache] ${message.id}: ${err.message}`);

@@ -1,13 +1,13 @@
-const { SlashCommandBuilder } = require("@discordjs/builders");
-const { Permissions } = require("discord.js");
+const { SlashCommandBuilder } = require("discord.js");
+const { PermissionsBitField } = require("discord.js");
 module.exports = {
   data: new SlashCommandBuilder().setName("purge").setDescription("Delete recent messages, optionally from one person.")
-    .setDefaultMemberPermissions(Permissions.FLAGS.MANAGE_MESSAGES)
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages)
     .addIntegerOption(o => o.setName("amount").setDescription("Maximum messages to delete (checks the latest 100).").setRequired(true).setMinValue(1).setMaxValue(100))
     .addUserOption(o => o.setName("user").setDescription("Only delete this person's messages.")),
   async execute(interaction) {
-    const permissions = interaction.channel.permissionsFor(interaction.guild.me);
-    if (!permissions?.has([Permissions.FLAGS.MANAGE_MESSAGES, Permissions.FLAGS.READ_MESSAGE_HISTORY]))
+    const permissions = interaction.channel.permissionsFor(interaction.guild.members.me);
+    if (!permissions?.has([PermissionsBitField.Flags.ManageMessages, PermissionsBitField.Flags.ReadMessageHistory]))
       return interaction.reply({ content: "I need Manage Messages and Read Message History here.", ephemeral: true });
     await interaction.deferReply({ ephemeral: true });
     const amount = interaction.options.getInteger("amount"), user = interaction.options.getUser("user");

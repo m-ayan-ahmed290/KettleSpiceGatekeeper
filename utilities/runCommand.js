@@ -20,7 +20,7 @@ async function runCommand(command, interaction, delay = 1500) {
     }
     return originalReply.call(interaction, payload);
   };
-  const privateCommands = new Set(["remind", "purge", "slowmode", "profile", "birthday", "block-words", "credits", "edit-ship", "manage-mod", "redeem", "roles-management", "warn", "help"]);
+  const privateCommands = new Set(["setup", "remind", "purge", "slowmode", "profile", "birthday", "block-words", "credits", "edit-ship", "manage-mod", "redeem", "roles-management", "warn", "help"]);
   const timer = setTimeout(() => {
     defer({ ephemeral: privateCommands.has(command.data.name) }).catch(error => console.warn("[Command acknowledgement]", error.message));
   }, delay);

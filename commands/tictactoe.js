@@ -1,274 +1,135 @@
-/**
- * tictactoe.js — Play Tic Tac Toe with another server member.
- *
- * Fixes:
- *  - Winner check was evaluated correctly but the draw check ran even when
- *    a winner existed (both ran, winner cleaned up activeGames twice).
- *    The draw branch now has an explicit return to prevent this.
- *  - `gameCollector.on("end")` ran unconditionally after a win/draw, trying
- *    to disable buttons on an already-updated message. Now guarded with a
- *    `gameOver` flag so the "end" handler only fires on timeout.
- *  - Both player draw points showed as "0" in the message but the DB
- *    stores -1. The message now reflects the actual delta.
- *  - activeGames cleanup was missing from the timeout path inside the
- *    "end" handler when a game was already finished.
- */
-
-const { SlashCommandBuilder } = require("@discordjs/builders");
-const { MessageActionRow, MessageButton } = require("discord.js");
-const Profile = require("../schemas/Profile");
-
-// Tracks in-progress games: userId → opponentId (both directions)
-const activeGames = new Map();
-
-// User IDs who cannot be challenged
-const INELIGIBLE_IDS = new Set(["295289522265260032", "263238337358331904"]);
-
+const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, StringSelectMenuBuilder, EmbedBuilder } = require('discord.js');
+const engines = require('../utilities/gameEngines');
+const { reserveSession } = require('../utilities/gameSessions');
+const { recordGame } = require('../utilities/gameStats');
+const { getGuildSettings } = require('../utilities/guildSettings');
+const Stats = require('../schemas/gameStats');
+const titles = { tictactoe: 'Tic Tac Toe', 'connect-four': 'Connect Four', guess: 'Number Guess', dungeon: 'Co-op Dungeon' };
+const button = (id, label, disabled = false, style = 2) => new ButtonBuilder().setCustomId(`game:${id}`).setLabel(label).setStyle(style).setDisabled(disabled);
 module.exports = {
-  data: new SlashCommandBuilder()
-    .setName("game")
-    .setDescription("Play games with friends!")
-    .addSubcommand((sub) =>
-      sub
-        .setName("tictactoe")
-        .setDescription("Play Tic Tac Toe with someone.")
-        .addUserOption((opt) =>
-          opt.setName("opponent").setDescription("Your opponent.").setRequired(true)
-        )
-    ),
-
+  data: new SlashCommandBuilder().setName('game').setDescription('Solo games, friendly challenges and cooperative adventures.')
+    .addSubcommand(s => s.setName('tictactoe').setDescription('Play against the bot, or challenge a server member.')
+      .addUserOption(o => o.setName('opponent').setDescription('Omit to play solo against the bot.')))
+    .addSubcommand(s => s.setName('connect-four').setDescription('Challenge someone to Connect Four.')
+      .addUserOption(o => o.setName('opponent').setDescription('Your opponent.').setRequired(true)))
+    .addSubcommand(s => s.setName('guess').setDescription('Find a secret number in five guesses.'))
+    .addSubcommand(s => s.setName('rps').setDescription('Play rock, paper, scissors against the bot.')
+      .addStringOption(o => o.setName('choice').setDescription('Your move.').setRequired(true).addChoices(...['rock','paper','scissors'].map(value => ({ name: value, value })))))
+    .addSubcommand(s => s.setName('dungeon').setDescription('Team up with a friend to defeat a boss. Share health and potions.')
+      .addUserOption(o => o.setName('partner').setDescription('Your teammate.').setRequired(true)))
+    .addSubcommand(s => s.setName('stats').setDescription('View game statistics in this server.')
+      .addUserOption(o => o.setName('user').setDescription('The player to look up.'))),
   async execute(interaction) {
-    if (interaction.options.getSubcommand() !== "tictactoe") return;
-
-    const player1 = interaction.user;
-    const player2 = interaction.options.getUser("opponent");
-
-    // ── Eligibility checks ────────────────────────────────────────────────
-    if (INELIGIBLE_IDS.has(player2.id)) {
-      return interaction.reply({ content: "You can't challenge that user.", ephemeral: true });
+    const kind = interaction.options.getSubcommand();
+    if (kind === 'stats') {
+      const user = interaction.options.getUser('user') || interaction.user;
+      const rows = await Stats.find({ GuildID: interaction.guild.id, UserID: user.id }).sort({ Points: -1 }).limit(5).lean();
+      return interaction.reply({ content: rows.length ? rows.map(row => `**${row.Game}** — ${row.Won} wins / ${row.Lost} losses / ${row.Drawn} draws · ${row.Points} arcade points`).join('\n') : 'No arcade games recorded for this player in this server yet. Existing Tic Tac Toe profile history remains available in /profile view.', ephemeral: true });
     }
-    if (player2.bot || player1.id === player2.id) {
-      return interaction.reply({ content: "❌ Invalid opponent.", ephemeral: true });
+    if (kind === 'rps') {
+      const choice = interaction.options.getString('choice'), outcome = engines.rockPaperScissors(choice);
+      const saved = await recordGame(interaction.guild.id, interaction.user, 'rps', outcome.result);
+      return interaction.reply({ content: `You chose **${choice}**. I chose **${outcome.opponent}**. **${outcome.result === 'draw' ? 'Draw!' : outcome.result === 'win' ? 'You win!' : 'I win!'}**${saved ? '' : '\nStats could not be saved.'}` });
     }
-    if (activeGames.size >= 40) return interaction.reply({ content: "All game slots are busy. Try again shortly.", ephemeral: true });
-    if (
-      activeGames.has(player1.id) || activeGames.has(player2.id)
-    ) {
-      return interaction.reply({
-        content: "⚠️ One of you is already in a game. Finish it first!",
-        ephemeral: true,
-      });
-    }
-
-    // ── Challenge phase ───────────────────────────────────────────────────
-    activeGames.set(player1.id, player2.id);
-    activeGames.set(player2.id, player1.id);
-
-    const acceptRow = new MessageActionRow().addComponents(
-      new MessageButton().setCustomId("accept_ttt").setLabel("Accept Challenge").setStyle("SUCCESS")
-    );
-
-    let challengeMsg;
+    const other = kind === 'dungeon' ? interaction.options.getUser('partner') : ['tictactoe','connect-four'].includes(kind) ? interaction.options.getUser('opponent') : null;
+    const settings = await getGuildSettings(interaction.guild.id);
+    if (other && (other.bot || other.id === interaction.user.id || settings.blockedGameUsers.includes(other.id)))
+      return interaction.reply({ content: 'Choose a different eligible human player.', ephemeral: true });
+    if (other && !await interaction.guild.members.fetch(other.id).catch(() => null))
+      return interaction.reply({ content: 'Choose a member of this server.', ephemeral: true });
+    const humans = [interaction.user, ...(other ? [other] : [])];
+    const release = reserveSession(interaction.guild.id, humans);
+    if (!release) return interaction.reply({ content: 'A player is already in a game here, or all 20 game slots are busy.', ephemeral: true });
     try {
-      challengeMsg = await interaction.reply({
-        content: `${player2}, you've been challenged to Tic Tac Toe by ${player1}! You have **60 seconds** to accept.`,
-        components: [acceptRow],
-        fetchReply: true,
-      });
-    } catch {
-      activeGames.delete(player1.id);
-      activeGames.delete(player2.id);
-      return;
-    }
-
-    const challengeCollector = challengeMsg.createMessageComponentCollector({
-      filter: (i) => i.customId === "accept_ttt" && i.user.id === player2.id,
-      time: 60_000,
-      max: 1,
-    });
-
-    challengeCollector.on("end", async (collected) => {
-
-
-      if (collected.size === 0) {
-        activeGames.delete(player1.id);
-        activeGames.delete(player2.id);
-        try {
-          await challengeMsg.edit({ content: "⏰ Challenge expired — game not accepted.", components: [] });
-        } catch {}
-        return;
-      }
-
-      await collected.first().deferUpdate().catch(() => {});
-
-      // ── Game phase ──────────────────────────────────────────────────────
-      const board   = Array.from({ length: 3 }, () => Array(3).fill(null));
-      const symbols = { [player1.id]: "❌", [player2.id]: "⭕" };
-      let current   = player1;
-      let moves     = 0;
-      let gameOver  = false;
-
-      const renderBoard = () =>
-        board.map((row, r) =>
-          new MessageActionRow().addComponents(
-            row.map((cell, c) =>
-              new MessageButton()
-                .setCustomId(`ttt_${r}_${c}`)
-                .setLabel(cell ?? "⬜")
-                .setStyle("SECONDARY")
-                .setDisabled(cell !== null || gameOver)
-            )
-          )
-        );
-
-      const turnText = () =>
-        `🎮 **Tic Tac Toe** — ${player1.username} ❌ vs ${player2.username} ⭕\nIt's **${current.username}**'s turn (${symbols[current.id]})`;
-
-      try {
-        await challengeMsg.edit({ content: turnText(), components: renderBoard() });
-      } catch {
-        cleanup();
-        return;
-      }
-
-      const gameCollector = challengeMsg.createMessageComponentCollector({
-        filter: (i) =>
-          [player1.id, player2.id].includes(i.user.id) &&
-          i.customId.startsWith("ttt_"),
-        time: 5 * 60_000,
-      });
-
-      gameCollector.on("collect", async (i) => {
-        if (gameOver) return i.deferUpdate();
-        if (i.user.id !== current.id) {
-          return i.reply({ content: "⏳ It's not your turn!", ephemeral: true });
+      const message = await interaction.reply({ content: other ? `${other}, ${interaction.user} invited you to **${titles[kind]}**. Accept within 60 seconds.` : `Starting **${titles[kind]}**…`,
+        components: other ? [new ActionRowBuilder().addComponents(button('accept', 'Accept', false, 3), button('decline', 'Decline', false, 4))] : [], fetchReply: true });
+      if (!other) return launchGame(message, interaction, kind, humans, release);
+      const collector = message.createMessageComponentCollector({ time: 60_000, max: 1,
+        filter: i => i.user.id === other.id && ['game:accept','game:decline'].includes(i.customId) });
+      collector.on('collect', i => i.deferUpdate().catch(() => {}));
+      collector.on('end', collected => {
+        const accepted = collected.first()?.customId === 'game:accept';
+        if (!accepted) {
+          release(); message.edit({ content: collected.size ? 'Challenge declined.' : 'Challenge expired.', components: [] }).catch(() => {}); return;
         }
-
-        const [, r, c] = i.customId.split("_").map(Number);
-        if (board[r][c]) return i.deferUpdate();
-
-        board[r][c] = symbols[current.id];
-        moves++;
-
-        if (checkWinner(board)) {
-          gameOver = true;
-          gameCollector.stop("winner");
-          cleanup();
-          await i.deferUpdate().catch(() => {});
-
-          const loser       = current.id === player1.id ? player2 : player1;
-          const winDelta    = await updateStats(current, interaction.guild, "win", moves);
-          const loseDelta   = await updateStats(loser,   interaction.guild, "lose");
-
-          try {
-            await (i.deferred ? i.editReply.bind(i) : i.update.bind(i))({
-              content:
-                `🎉 **${current.username}** (${symbols[current.id]}) wins after ${moves} moves!\n` +
-                `<@${current.id}>: **+${winDelta}** pts | <@${loser.id}>: **${loseDelta}** pts`,
-              components: renderBoard(),
-            });
-          } catch {}
-          cleanup();
-          return;
-        }
-
-        const isDraw = board.flat().every((cell) => cell !== null);
-        if (isDraw) {
-          gameOver = true;
-          gameCollector.stop("draw");
-          cleanup();
-          await i.deferUpdate().catch(() => {});
-
-          const d1 = await updateStats(player1, interaction.guild, "draw");
-          const d2 = await updateStats(player2, interaction.guild, "draw");
-
-          try {
-            await (i.deferred ? i.editReply.bind(i) : i.update.bind(i))({
-              content:
-                `🤝 It's a draw!\n` +
-                `<@${player1.id}>: **${d1}** pts | <@${player2.id}>: **${d2}** pts`,
-              components: renderBoard(),
-            });
-          } catch {}
-          cleanup();
-          return;
-        }
-
-        // Switch turn
-        current = current.id === player1.id ? player2 : player1;
-        try {
-          await (i.deferred ? i.editReply.bind(i) : i.update.bind(i))({ content: turnText(), components: renderBoard() });
-        } catch {}
+        launchGame(message, interaction, kind, humans, release).catch(error => { release(); console.error('[Game start]', error.message); });
       });
-
-      gameCollector.on("end", async (_, reason) => {
-        if (reason === "winner" || reason === "draw") return; // Already handled
-        // Timed out
-        cleanup();
-        try {
-          gameOver = true;
-          await challengeMsg.edit({
-            content: `⏰ Game timed out — no moves made in 5 minutes.`,
-            components: renderBoard(),
-          });
-        } catch {}
-      });
-
-      function cleanup() {
-        activeGames.delete(player1.id);
-        activeGames.delete(player2.id);
-      }
-    });
+    } catch (error) { release(); throw error; }
   },
 };
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function checkWinner(b) {
-  for (let i = 0; i < 3; i++) {
-    if (b[i][0] && b[i][0] === b[i][1] && b[i][1] === b[i][2]) return true;
-    if (b[0][i] && b[0][i] === b[1][i] && b[1][i] === b[2][i]) return true;
-  }
-  return (
-    (b[0][0] && b[0][0] === b[1][1] && b[1][1] === b[2][2]) ||
-    (b[0][2] && b[0][2] === b[1][1] && b[1][1] === b[2][0])
-  );
+function stateFor(kind) {
+  return kind === 'tictactoe' ? engines.createTicTacToe() : kind === 'connect-four' ? engines.createConnectFour() : kind === 'guess' ? engines.createGuess() : engines.createDungeon();
 }
-
-async function updateStats(user, guild, result, moves = 0) {
-  const query   = { UserID: user.id, GuildID: guild.id };
-  let profile;
-  try { profile = await Profile.findOne(query); }
-  catch (error) { console.error("[Game] Could not load stats:", error); return 0; }
-
-  if (!profile) {
-    profile = new Profile({
-      Username: user.username, UserID: user.id, GuildID: guild.id,
-      Points: 0, DateJoined: new Date(), Hidden: false,
-      TicTacToe: { GamesPlayed: 0, GamesWon: 0, GamesLost: 0, GamesDrawn: 0, FastestWin: null },
+function render(state, players, soloBot) {
+  let board = '', components = [];
+  if (state.kind === 'tictactoe') {
+    for (let row = 0; row < 3; row++) components.push(new ActionRowBuilder().addComponents(Array.from({ length: 3 }, (_, col) => {
+      const index = row * 3 + col;
+      return button(String(index), state.board[index] == null ? '⬜' : state.board[index] === 0 ? '❌' : '⭕', state.over || state.board[index] != null);
+    })));
+  } else if (state.kind === 'connect-four') {
+    board = state.board.map(row => row.map(cell => cell == null ? '⚪' : cell === 0 ? '🔴' : '🟡').join('')).join('\n') + '\n1️⃣2️⃣3️⃣4️⃣5️⃣6️⃣7️⃣';
+    const buttons = Array.from({ length: 7 }, (_, col) => button(String(col), String(col + 1), state.over || state.board[0][col] != null));
+    components = [new ActionRowBuilder().addComponents(buttons.slice(0, 4)), new ActionRowBuilder().addComponents(buttons.slice(4))];
+  } else if (state.kind === 'guess') {
+    components = [new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('game:guess').setPlaceholder('Choose a number from 1 to 20').setDisabled(state.over)
+      .addOptions(Array.from({ length: 20 }, (_, n) => ({ label: String(n + 1), value: String(n + 1) }))))];
+    board = state.note;
+  } else {
+    board = `Party HP: **${state.hp}/24** · Boss HP: **${state.boss}/40**\nPotions: **${state.potions}** · Guard: **${state.shield}** · Round: **${Math.min(12, state.round)}/12**\n${state.note}`;
+    components = [new ActionRowBuilder().addComponents(button('attack', 'Attack', state.over, 4), button('guard', 'Guard', state.over, 1), button('heal', 'Heal', state.over || !state.potions || state.hp === 24, 3))];
+  }
+  const names = players.map(user => user.username).concat(soloBot ? ['Bot'] : []);
+  let status;
+  if (state.over) status = state.kind === 'dungeon' ? state.winner === 'party' ? '🎉 Team victory!' : 'The adventure is over.'
+    : state.kind === 'guess' ? state.winner === 0 ? '🎉 You found it!' : 'Game over.' : state.winner == null ? '🤝 Draw!' : `🎉 ${names[state.winner]} wins!`;
+  else status = `${names[state.turn]}'s turn`;
+  const embed = new EmbedBuilder().setTitle(titles[state.kind]).setColor(0x5865f2).setDescription([names.join(' + '), board, status].filter(Boolean).join('\n\n'));
+  return { content: '', embeds: [embed], components };
+}
+async function launchGame(message, interaction, kind, humans, release) {
+  const state = stateFor(kind), soloBot = kind === 'tictactoe' && humans.length === 1;
+  let busy = false;
+  try { await message.edit(render(state, humans, soloBot)); } catch (error) { release(); throw error; }
+  const collector = message.createMessageComponentCollector({ time: 5 * 60_000, idle: 90_000, filter: i => i.customId.startsWith('game:') });
+  collector.on('collect', i => {
+    (async () => {
+      const player = humans.findIndex(user => user.id === i.user.id);
+      if (player < 0) return i.reply({ content: 'Only this game’s players can make moves.', ephemeral: true });
+      if (busy || state.over) return i.deferUpdate();
+      if (player !== state.turn) return i.reply({ content: 'Wait for your turn.', ephemeral: true });
+      busy = true;
+      try {
+        await i.deferUpdate();
+        const action = i.customId.slice(5);
+        try {
+          if (kind === 'tictactoe') {
+            engines.playTicTacToe(state, Number(action), player);
+            if (soloBot && !state.over) engines.playTicTacToe(state, engines.botSquare(state), 1);
+          } else if (kind === 'connect-four') engines.playConnectFour(state, Number(action), player);
+          else if (kind === 'guess') engines.playGuess(state, Number(i.values?.[0]));
+          else engines.playDungeon(state, action, player);
+        } catch (error) { await i.followUp({ content: error.message, ephemeral: true }); return; }
+        if (state.over) { collector.stop('finished'); release(); }
+        await message.edit(render(state, humans, soloBot));
+        if (state.over) {
+          let saved = true;
+          for (let n = 0; n < humans.length; n++) {
+            const result = kind === 'dungeon' ? state.winner === 'party' ? 'win' : 'lose'
+              : kind === 'guess' ? state.winner === 0 ? 'win' : 'lose' : state.winner == null ? 'draw' : state.winner === n ? 'win' : 'lose';
+            if (!await recordGame(interaction.guild.id, humans[n], kind, result, state.moves)) saved = false;
+          }
+          if (!saved) await message.edit({ content: 'The game finished, but some stats could not be saved.' });
+        }
+      } finally { busy = false; }
+    })().catch(error => {
+      console.error('[Game move]', error.message); state.over = true; collector.stop('error'); release();
+      message.edit({ content: 'This game ended because the message could not be updated.', components: [] }).catch(() => {});
     });
-  }
-
-  const stats = profile.TicTacToe;
-  stats.GamesPlayed++;
-  let delta = 0;
-
-  if (result === "win") {
-    stats.GamesWon++;
-    delta = Math.max(10, 40 - moves * 5);
-    profile.Points += delta;
-    if (!stats.FastestWin || moves < stats.FastestWin) stats.FastestWin = moves;
-  } else if (result === "lose") {
-    stats.GamesLost++;
-    delta = -5;
-    profile.Points = Math.max(0, profile.Points + delta);
-  } else if (result === "draw") {
-    stats.GamesDrawn++;
-    delta = -1;
-    profile.Points = Math.max(0, profile.Points + delta);
-  }
-
-  try { await profile.save(); }
-  catch (error) { console.error("[Game] Could not save stats:", error); return 0; }
-  return delta;
+  });
+  collector.on('end', (_, reason) => {
+    release();
+    if (reason !== 'finished') { state.over = true; message.edit({ content: reason === 'error' ? 'Game ended.' : 'Game expired after inactivity or five minutes.', components: [] }).catch(() => {}); }
+  });
 }
+module.exports.render = render;

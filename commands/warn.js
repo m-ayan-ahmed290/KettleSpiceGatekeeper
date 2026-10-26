@@ -7,10 +7,10 @@
  *   /warn list           — List the top offenders in this server
  */
 
-const { SlashCommandBuilder } = require("@discordjs/builders");
-const { MessageEmbed, Permissions } = require("discord.js");
+const { SlashCommandBuilder } = require("discord.js");
+const { EmbedBuilder, PermissionsBitField } = require("discord.js");
 const CommissionOffender = require("../schemas/commissionOffender");
-const { guildId } = require("../config.json");
+
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -35,7 +35,7 @@ module.exports = {
     .addSubcommand((sub) =>
       sub.setName("list").setDescription("List top commission-spam offenders in this server.")
     )
-    .setDefaultMemberPermissions(Permissions.FLAGS.MODERATE_MEMBERS),
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.ModerateMembers),
 
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
@@ -72,10 +72,10 @@ async function handleView(interaction) {
     });
   }
 
-  const embed = new MessageEmbed()
+  const embed = new EmbedBuilder()
     .setColor("#FF6600")
     .setTitle(`🚨 Commission Spam Record — ${user.username}`)
-    .setThumbnail(user.displayAvatarURL({ dynamic: true }))
+    .setThumbnail(user.displayAvatarURL({}))
     .addFields(
       { name: "⚡ Total Strikes", value: `${offender.Strikes}`,                              inline: true },
       { name: "🕐 Last Strike",  value: formatDate(offender.LastStrike),                    inline: true },
@@ -108,7 +108,7 @@ async function handleClear(interaction) {
 
   // Try to lift any active timeout
   try {
-    const member = await interaction.guild.members.fetch(user.id);
+    const member = await interaction.guild.members.members.fetch(user.id);
     if (member.communicationDisabledUntilTimestamp) {
       await member.timeout(null, `Timeout lifted by ${interaction.user.tag} via /warn clear`);
     }
@@ -141,7 +141,7 @@ async function handleList(interaction) {
       `\`${i + 1}.\` **${o.Username}** — ${o.Strikes} strike(s) | Last: ${formatDate(o.LastStrike)}`
   );
 
-  const embed = new MessageEmbed()
+  const embed = new EmbedBuilder()
     .setColor("#FF6600")
     .setTitle("🚨 Commission Spam Offenders")
     .setDescription(lines.join("\n"))

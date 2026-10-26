@@ -10,14 +10,14 @@
  */
 
 const Birthday = require("../schemas/birthdays");
-const { vipBDCh, plebBDCh } = require("../config.json");
-const { SlashCommandBuilder } = require("@discordjs/builders");
-const { MessageEmbed } = require("discord.js");
+const { getGuildSettings } = require("../utilities/guildSettings");
+const { SlashCommandBuilder } = require("discord.js");
+const { EmbedBuilder } = require("discord.js");
 
 const MIN_YEAR = 1980;
 
 /** Roles that qualify a member for the VIP birthday channel. */
-const VIP_ROLE_NAMES = new Set(["Moderator", "Basement Dwellers"]);
+
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -41,7 +41,7 @@ module.exports = {
   async execute(interaction) {
     const dateInput = interaction.options.getString("date")?.trim();
     if (!dateInput) {
-      const saved = await Birthday.findOne({ UserID: interaction.user.id }).lean();
+      const saved = await Birthday.findOne({ GuildID: interaction.guild.id, UserID: interaction.user.id }).lean();
       return interaction.reply({ content: saved ? `Your birthday is ${new Date(saved.Date).toISOString().slice(0, 10)} (UTC${saved.Timezone >= 0 ? "+" : ""}${saved.Timezone}).` : "You have no birthday set. Use /birthday date:YYYY-MM-DD timezone:0.", ephemeral: true });
     }
     const timezone = interaction.options.getNumber("timezone") ?? 0;
@@ -50,7 +50,7 @@ module.exports = {
     try {
       // ── Remove birthday ───────────────────────────────────────────────────
       if (dateInput === "0") {
-        const deleted = await Birthday.findOneAndDelete({ UserID: user.id });
+        const deleted = await Birthday.findOneAndDelete({ GuildID: interaction.guild.id, UserID: user.id });
         return interaction.reply({
           content: deleted
             ? "✅ Your birthday has been removed."
@@ -114,13 +114,12 @@ module.exports = {
       }
 
       // ── Determine VIP status ──────────────────────────────────────────────
-      const hasRole = interaction.member.roles.cache.some((r) =>
-        VIP_ROLE_NAMES.has(r.name)
-      );
+      const settings = await getGuildSettings(interaction.guild.id);
+      const hasRole = interaction.member.roles.cache.some(r => settings.birthday.vipRoles.includes(r.id) || settings.birthday.vipRoleNames.includes(r.name));
 
       // ── Upsert birthday ───────────────────────────────────────────────────
       await Birthday.findOneAndUpdate(
-        { UserID: user.id },
+        { GuildID: interaction.guild.id, UserID: user.id },
         {
           Username: user.username,
           UserID:   user.id,
@@ -137,7 +136,7 @@ module.exports = {
         ephemeral: true,
       });
 
-      const saved = await Birthday.findOne({ UserID: user.id }).lean();
+      const saved = await Birthday.findOne({ GuildID: interaction.guild.id, UserID: user.id }).lean();
       await require("../events/ready").processBirthday(interaction.client, saved);
     } catch (error) {
       console.error("[Birthday Command] Error:", error);

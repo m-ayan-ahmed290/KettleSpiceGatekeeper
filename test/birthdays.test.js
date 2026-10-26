@@ -11,12 +11,17 @@ require.cache[modelPath] = { id: modelPath, filename: modelPath, loaded: true, e
   },
   async updateOne(query, update) { if (claimed === query.LastWished) claimed = update.$set.LastWished; },
 } };
+const vipBDCh = 'birthday-channel';
+const settingsPath = require.resolve('../utilities/guildSettings');
+require.cache[settingsPath] = { id: settingsPath, filename: settingsPath, loaded: true, exports: {
+  getGuildSettings: async () => ({ features: { birthdays: true }, birthday: { vipRoles: ['vip'], vipRoleNames: [], eligibleRoles: [], allowEveryone: false }, channels: { birthdayVip: vipBDCh } }),
+  guildChannel: async (guild, id) => guild.channels.cache.get(id),
+} };
 const { processBirthday } = require('../events/ready');
-const { vipBDCh } = require('../config.json');
 const now = new Date();
 const birthday = { _id: 'birthday', UserID: '123', GuildID: 'guild', Date: new Date(Date.UTC(2000, now.getUTCMonth(), now.getUTCDate())), Timezone: 0, HasRole: true };
 const client = {
-  guilds: { cache: new Collection([['guild', { iconURL: () => null, channels: { cache: new Collection([[vipBDCh, { async send() { if (shouldFail) throw new Error('send failed'); sends++; } }]]) } }]]) },
+  guilds: { cache: new Collection([['guild', { id: 'guild', name: 'Test', members: { fetch: async () => ({ user: { username: 'Alice', displayAvatarURL: () => 'https://example.test/a.png' }, roles: { cache: new Collection([['vip', { id: 'vip', name: 'VIP' }]]) } }) }, iconURL: () => null, channels: { cache: new Collection([[vipBDCh, { async send() { if (shouldFail) throw new Error('send failed'); sends++; } }]]) } }]]) },
   users: { fetch: async () => ({ username: 'Alice', displayAvatarURL: () => 'https://example.test/avatar.png' }) },
 };
 test('concurrent birthday checks and a subsequent restart check send only once', async () => {

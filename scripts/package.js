@@ -60,9 +60,9 @@ function main() {
     throw new Error('Move secrets out of config.json before packaging. No archive was built.');
   fs.mkdirSync(output, { recursive: true });
   const source = [];
-  for (const name of ['index.js', 'start.js', 'config.json', 'package.json', 'package-lock.json', '.env.example', 'README.md', 'WISPBYTE.md', 'CHANGELOG.md'])
+  for (const name of ['bot.js', 'index.js', 'start.js', 'config.json', 'package.json', 'package-lock.json', '.env.example', 'README.md', 'WISPBYTE.md', 'CHANGELOG.md', 'KETTLE_SETUP.md', 'MULTI_GUILD.md', 'GAMES.md'])
     source.push({ name, source: path.join(root, name) });
-  for (const name of ['commands', 'events', 'schemas', 'utilities', 'api', 'data', 'scripts', 'test', 'deploy'])
+  for (const name of ['commands', 'events', 'schemas', 'utilities', 'api', 'data', 'scripts', 'test', 'deploy', 'presets'])
     source.push(...collect(path.join(root, name), name + '/'));
   const manifests = [buildZip(path.join(output, 'ktg-bot-source.zip'), source)];
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'ktg-package-'));

@@ -7,12 +7,12 @@
  *  - refreshing all members can take time; now defers the reply first.
  */
 
-const { SlashCommandBuilder } = require("@discordjs/builders");
-const { Permissions } = require("discord.js");
+const { SlashCommandBuilder } = require("discord.js");
+const { PermissionsBitField } = require("discord.js");
 const { assignRolesToAllMembers } = require("../utilities/functions");
-const { emoji } = require("../data/emojis.json");
+const { emojiForGuild } = require("../utilities/emojis");
 
-const OWNER_ID = "648146589814095893";
+
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -34,16 +34,9 @@ module.exports = {
           opt.setName("role").setDescription("The role to assign.").setRequired(true)
         )
     )
-    .setDefaultMemberPermissions(Permissions.FLAGS.BAN_MEMBERS),
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator),
 
   async execute(interaction) {
-    if (interaction.user.id !== OWNER_ID) {
-      return interaction.reply({
-        content: `${emoji.failure} You don't have permission to use this command.`,
-        ephemeral: true,
-      });
-    }
-
     const sub = interaction.options.getSubcommand();
 
     if (sub === "assign") {
@@ -52,10 +45,10 @@ module.exports = {
 
       let member;
       try {
-        member = await interaction.guild.members.fetch(targetUser.id);
+        member = await interaction.guild.members.members.fetch(targetUser.id);
       } catch {
         return interaction.reply({
-          content: `${emoji.failure} Could not find that member in this server.`,
+          content: `${emojiForGuild(interaction.guild.id).failure} Could not find that member in this server.`,
           ephemeral: true,
         });
       }
@@ -63,13 +56,13 @@ module.exports = {
       try {
         await member.roles.add(role);
         return interaction.reply({
-          content: `${emoji.success} Assigned **${role.name}** to **${member.user.tag}**.`,
+          content: `${emojiForGuild(interaction.guild.id).success} Assigned **${role.name}** to **${member.user.tag}**.`,
           ephemeral: true,
         });
       } catch (error) {
         console.error("[RolesManagement] Failed to assign role:", error);
         return interaction.reply({
-          content: `${emoji.failure} Failed to assign **${role.name}** — check my role hierarchy.`,
+          content: `${emojiForGuild(interaction.guild.id).failure} Failed to assign **${role.name}** — check my role hierarchy.`,
           ephemeral: true,
         });
       }
@@ -80,14 +73,14 @@ module.exports = {
       await interaction.deferReply({ ephemeral: true });
 
       try {
-        await assignRolesToAllMembers();
+        await assignRolesToAllMembers(interaction.guild);
         return interaction.editReply({
-          content: `${emoji.success} Successfully refreshed tier roles for all members.`,
+          content: `${emojiForGuild(interaction.guild.id).success} Successfully refreshed tier roles for all members.`,
         });
       } catch (error) {
         console.error("[RolesManagement] Refresh failed:", error);
         return interaction.editReply({
-          content: `${emoji.failure} Role refresh failed — check the console.`,
+          content: `${emojiForGuild(interaction.guild.id).failure} Role refresh failed — check the console.`,
         });
       }
     }

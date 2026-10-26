@@ -2,10 +2,10 @@
  * check-credits.js — View credit balance and recent moderation actions.
  */
 
-const { SlashCommandBuilder } = require("@discordjs/builders");
-const { MessageEmbed, Permissions } = require("discord.js");
+const { SlashCommandBuilder } = require("discord.js");
+const { EmbedBuilder, PermissionsBitField } = require("discord.js");
 const creditSchema = require("../schemas/credits");
-const { emoji } = require("../data/emojis.json");
+const { emojiForGuild } = require("../utilities/emojis");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -17,35 +17,35 @@ module.exports = {
         .setDescription("The moderator to look up (defaults to you).")
         .setRequired(false)
     )
-    .setDefaultMemberPermissions(Permissions.FLAGS.MANAGE_MESSAGES),
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages),
 
   async execute(interaction) {
     const user = interaction.options.getUser("moderator") ?? interaction.user;
 
     try {
-      const creditUser = await creditSchema.findOne({ UserID: user.id }).slice("Action", -5).lean();
+      const creditUser = await creditSchema.findOne({ GuildID: interaction.guild.id, UserID: user.id }).slice("Action", -5).lean();
 
       if (!creditUser) {
         return interaction.reply({
           content:
-            `${emoji.failure} **${user.username}** has no credit record yet.\n` +
+            `${emojiForGuild(interaction.guild.id).failure} **${user.username}** has no credit record yet.\n` +
             `Credits are earned through bans, warnings, kicks, timeouts, and closed tickets.`,
           ephemeral: true,
         });
       }
 
-      const embed = new MessageEmbed()
+      const embed = new EmbedBuilder()
         .setColor(creditUser.Blocked ? "#FF0000" : "#00ff00")
         .setTitle(`Moderator Credits — ${user.username}`)
-        .setThumbnail(user.displayAvatarURL({ dynamic: true }))
+        .setThumbnail(user.displayAvatarURL({}))
         .addFields({
           name: "💰 Credits",
-          value: `${emoji.credits} **${creditUser.Credits.toLocaleString()}**`,
+          value: `${emojiForGuild(interaction.guild.id).credits} **${creditUser.Credits.toLocaleString()}**`,
           inline: true,
         })
         .setFooter({
           text: `Requested by ${interaction.user.username}`,
-          iconURL: interaction.user.displayAvatarURL({ dynamic: true }),
+          iconURL: interaction.user.displayAvatarURL({}),
         })
         .setTimestamp();
 
@@ -74,7 +74,7 @@ module.exports = {
       console.error("[Credits] Error:", error);
 
       const errMsg = {
-        content: `${emoji.failure} Error fetching credits data.`,
+        content: `${emojiForGuild(interaction.guild.id).failure} Error fetching credits data.`,
         ephemeral: true,
       };
 

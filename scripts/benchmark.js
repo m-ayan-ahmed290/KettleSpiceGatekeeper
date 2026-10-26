@@ -1,7 +1,7 @@
 // Offline synthetic workload: no Discord/MongoDB credentials or traffic.
 const assert = require("node:assert/strict");
-const fetchPath = require.resolve("node-fetch");
-require.cache[fetchPath] = { id: fetchPath, filename: fetchPath, loaded: true, exports: async () => ({ ok: true, buffer: async () => Buffer.alloc(8 * 1024 * 1024, 1) }) };
+const fetchPath = require.resolve("../utilities/download");
+require.cache[fetchPath] = { id: fetchPath, filename: fetchPath, loaded: true, exports: { downloadBuffer: async () => Buffer.alloc(8 * 1024 * 1024, 1) } };
 const fs = require("fs");
 const { performance } = require("perf_hooks");
 const client = require("../utilities/client");

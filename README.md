@@ -1,54 +1,80 @@
-# Kettle Spice Gatekeeper
+# Gatekeeper Bot 3.0
 
-Discord.js 13 bot with moderation, tier roles, birthdays, moderator credits, profiles, Tic Tac Toe, ships, redeem-code announcements and a dashboard API. All 13 original top-level commands remain; `/help` lists commands available to the caller. Version 2.1.0 has 19 top-level commands.
+A Discord bot for multiple servers: moderation, automatic roles, birthdays, moderator credits, profiles, reminders, redeem codes, polls and solo/cooperative games. It retains all 13 original commands and has 20 top-level commands, including the administrator-only `/setup` command.
 
-For Wispbyte, download the bundled ZIP and follow [WISPBYTE.md](WISPBYTE.md). It includes production dependencies and a launcher that applies the heap limit. New in 2.1.0: persistent DM reminders, reaction polls, purge, slowmode, server information, blocklist viewing and birthday readback.
+**Already using it in Kettle's server? Read [KETTLE_SETUP.md](KETTLE_SETUP.md) before updating.** It explains the original settings and the non-destructive data import. For another server, follow [MULTI_GUILD.md](MULTI_GUILD.md).
 
-## Small-server setup
+- [Upload or Git deployment on Wispbyte](WISPBYTE.md)
+- [Game rules and commands](GAMES.md)
+- [Changes](CHANGELOG.md)
 
-Use Node.js 22 or later and a **remote MongoDB database**. The 512 MB budget is for the bot process; hosting MongoDB in that same budget is not supported. Interpret the requested storage budget as 1 GB (1024 MB).
+## Start
 
-1. Install production dependencies with `npm ci --omit=dev --no-audit --no-fund`.
-2. Copy `.env.example` to `.env` and set `DISCORD_TOKEN`, `MONGODB_URI`, and `BOT_API_SECRET`. Existing `config.json` token/database settings still work as fallbacks. Keep existing guild, channel, role and integration IDs configured there.
-3. Enable Server Members and Message Content privileged intents in the Discord developer portal. Presence intent is no longer needed. Grant the bot the permissions used by its features: member timeouts, role management, message management, audit-log access, webhook management and channel access; put its role above roles it manages.
-4. Run `npm start`. The start command caps V8 old-space at 256 MB, leaving headroom for native buffers and Discord/database connections.
+Use Node.js 24 (22.12+ also satisfies this build's declared engine requirements) and a **remote MongoDB database**. Do not run MongoDB inside the 512 MB bot container.
 
-For systemd, copy the repository to `/opt/ktg-bot`, create an unprivileged `ktg-bot` service user with read access, and install `deploy/ktg-bot.service` into `/etc/systemd/system/`. Adjust its executable path for your Node installation. Then run `systemctl daemon-reload` and `systemctl enable --now ktg-bot` as the server administrator.
+```sh
+npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+npm start
+```
 
-The supplied service enforces **35% of one CPU core**, **512 MiB total process memory**, and no swap. On Wispbyte/Pterodactyl or another container host, use the host's CPU=35%, RAM=512 MB, storage=1024 MB controls and the `npm start` command instead. These limits throttle CPU and can terminate an overloaded process; responsiveness depends on guild size and message volume. A JavaScript heap limit alone does not cap RSS or CPU.
+Set these private environment variables in your hosting panel, or create `.env` from `.env.example`:
 
-The app stores attachment buffers only in memory and writes no media or log files. Production dependencies were approximately 51 MB in the development environment. Keep MongoDB external, avoid development dependencies and local backups, remove package-manager caches after installation if space is tight, and bound host logs. A filesystem/container quota is required to enforce 1024 MB storage; systemd's CPU/memory controls do not enforce disk quotas. For journald, configure a host-appropriate size limit (e.g. 32 MB); the service also rate-limits log output.
+| Variable | Purpose |
+| --- | --- |
+| `DISCORD_TOKEN` | Required: Discord bot token. |
+| `MONGODB_URI` | Required: MongoDB URI; keep the same database to retain existing data. |
+| `BOT_API_SECRET` | Optional: operator-wide dashboard API secret. Protected API routes are disabled without it. |
+| `BOT_API_PORT` | Optional HTTP port; otherwise uses `PORT`, `SERVER_PORT`, then 4000. |
+| `DASHBOARD_URL` | Optional allowed dashboard origin. |
+| `GUILD_ID` | Optional default server for dashboard requests; does not restrict the Discord bot to one server. |
+| `LEGACY_GUILD_ID` | Only for forks: assigns old records without a GuildID to this joined server. Kettle uses the bundled original ID automatically. |
+| `IMPORT_LEGACY_DATA` | Set to `false` to disable old-data import. Omit for the Kettle upgrade. |
 
-## Efficiency and behavior
+Enable **Server Members** and **Message Content** intents in the Discord Developer Portal. Invite the bot using the `bot` and `applications.commands` scopes. Give it the channel and moderation permissions required by the features you enable. Presence intent is unnecessary.
 
-- Discord caches: 50 messages per channel, 200 members per guild, 300 users globally, no presence cache; old messages are swept. Random `/ship` partners come from the bounded member cache; provide names if no partner is cached.
-- Attachment recovery: a 24 MiB total buffer/reservation budget, 8 MiB maximum file, two simultaneous downloads, ten-second download timeout, ten-minute expiry and 500 metadata entries. Old entries are evicted under pressure. At most two deletion uploads run together; overflow recovery is dropped. Media recovery is best effort; files skipped, expired, oversized, or still downloading when deleted may be unavailable. Optional downloads pause above 384 MiB RSS or a 15% CPU sample. Deletion logs explain missing files.
-- Role refresh: 100-member REST pages, sequential assignments and one shared in-progress refresh. Completion replies now wait for the actual job. Role changes skip unrelated member updates. Restricted-channel penalties precede history cleanup, with at most two history-cleanup jobs at once.
-- MongoDB: three pooled connections; leaderboard/history queries fetch only needed fields. Automatic credit awards use atomic increments and a unique user index. The last 1,000 source IDs per moderator suppress event replay; this is a bounded deduplication window, not permanent event archival. Existing action history is preserved.
-- Birthdays: checks every 15 minutes in each stored UTC offset, supports fractional offsets (e.g. 5.5), and persists the last announcement date to avoid restart/repeated-command duplicates. Eligibility and configured VIP/subscriber channels apply equally to immediate and scheduled announcements. As with any send-and-record workflow, a crash between the stored claim and Discord delivery can miss a greeting.
-- Block words: whole-word/phrase matching in the configured moderation guild, cached for one minute and invalidated on edits. Commission keywords use word boundaries to reduce false positives.
-- Commands: runtime permission checks, server-only handling, prompt acknowledgement of slow work, errors isolated at event boundaries. Tic Tac Toe acknowledges acceptance/final moves, caps simultaneous games at 20 and cleans up slots. Redeem announcements validate/deduplicate codes, URL-encode links and allow missing optional banner images.
-- `/ping` and `/bot/stats` expose RSS, heap, sampled CPU and attachment memory. CPU is sampled every five seconds as a percentage of one core; it initially reports zero until the first sample. Graceful shutdown closes Discord, HTTP and MongoDB.
+Both `node index.js` and `node start.js` apply a 256 MiB old-space limit. `index.js` relaunches through the small launcher if the flag is missing; `bot.js` is the internal implementation and should not be used as the panel entry file. Tokens/database URLs in the old `config.json` remain fallbacks, but deployment archives contain blank credentials. Old guild/channel fields in that file are no longer the live server configuration.
 
-New commands are documented in [WISPBYTE.md](WISPBYTE.md). The reminder worker uses MongoDB for persistence, one minute ticks and batches of ten; it keeps no per-reminder timers. Command executions are limited to eight at once with a two-second per-user cooldown. Personal reminder text is excluded from moderator command logs.
+## Multiple servers
 
-Before first production startup, check the existing `creditschemas` collection for duplicate `UserID` values. The new unique index cannot build until duplicates are resolved. Do not blindly delete or merge credit records: preserve balances and histories using your database backup/reconciliation policy. Review index-creation errors in startup logs.
+Settings, credits and block status, archived credits, birthdays, blocked words, ships, redeem banners, strike records and new game statistics are scoped by GuildID. Profiles and reminders already had guild identities and retain their collections. New servers receive no Kettle channels, role rules, game exclusions or automatic moderation. Run `/setup view` in each server to begin.
 
-## Dashboard API
+Original Kettle defaults are isolated in `presets/kettle.json`, applied only to those exact original server IDs. Saved `/setup` choices override the preset. Custom Kettle emojis remain available there; other servers use standard Unicode emojis. Destinations are resolved through the current guild, so media/logging will never post into another server's channel.
 
-Protected endpoints require `x-bot-secret` matching `BOT_API_SECRET`. If the secret is absent, protected endpoints return 503. Set the same secret in the existing dashboard. `/health` is public and returns 200 only when Discord and MongoDB are ready, otherwise 503.
+Configuration, role maintenance and credit administration require server Administrator permission; regular moderation commands retain their individual permissions. The dashboard secret is an **operator credential across all joined servers**, not a per-server administrator login. Keep it private.
 
-Member listing retains its array response, returns at most 100 members per request and supports `?after=<snowflake>` pagination; `X-Next-Cursor` gives the last fetched member ID. The header is exposed through CORS. Credit leaderboards omit action histories; the individual-user endpoint returns the latest 100 actions. These bounds require dashboards that previously expected a single large response to paginate. All existing endpoint paths remain.
+## Small-host behavior
 
-## Verification
+Designed for Wispbyte's stated 35% CPU, 512 MB RAM and 1,024 MB storage tier. Host quotas enforce actual CPU/RSS/disk limits; application limits do not guarantee responsiveness under every workload.
+
+- Discord caches: 25 messages per channel, 100 members per guild, 200 users globally, no presence cache; old messages are swept. Random `/ship` partners come from the member cache, or can be provided explicitly.
+- Attachment recovery: 24 MiB buffer/reservation budget, 8 MiB/file, two simultaneous downloads, ten-minute expiry and 500 metadata records. Downloads stop under memory/CPU pressure; at most two deletion recovery jobs run together. Recovery is best effort: oversized, expired, evicted or incomplete downloads may be unavailable after deletion.
+- Three MongoDB pooled connections; 100-member REST role-refresh pages; sequential bulk work; one role refresh per guild. Role rules and logs stay in the same guild.
+- At most eight concurrent commands, a two-second per-person command cooldown, and twenty live game sessions across all servers. Games expire after 90 seconds idle or five minutes total; challenges expire after one minute. Games use buttons/select menus and no media rendering or external game APIs.
+- Reminders use one minute ticks, ten due deliveries per pass, and at most ten pending reminders per person. Birthdays use one scheduler with timezone-aware checks every 15 minutes. No timer is allocated per reminder or database record.
+- Background settings/word caches hold at most 100 guilds each. Blocklists are capped at 1,000 words/phrases per server.
+- Credits use atomic increments and guild/user unique indexes. The last 1,000 source IDs per moderator suppress gateway replays; timeout audit IDs also remain in the processed-log collection. Existing credit history is retained.
+- The bot writes no downloaded media or application log files to disk. Remove uploaded ZIPs, old dependency trees and unused package caches on the host. Keep database backups outside the bot container.
+
+`/ping` and `/bot/stats` expose sampled CPU, RSS, heap and attachment memory. CPU sampling is a percentage of one core, every five seconds; the first sample starts at zero. Optional media downloads pause above 384 MiB RSS or a 15% CPU sample. The platform can still throttle or stop overloaded free servers.
+
+## Dashboard compatibility
+
+Existing `/bot/...` paths remain. Authenticate with `x-bot-secret`; choose a joined server with `x-guild-id` or `?guildId=`. If omitted, `GUILD_ID` applies; the original Kettle server remains the compatibility fallback. `/bot/guilds` lists up to 100 joined servers with operator authentication. `/health` is public and returns 200 only after Discord, MongoDB and migration are ready.
+
+Members use bounded REST pages with `?limit=` (max 100) and `?after=<snowflake>`; `X-Next-Cursor` contains the next cursor. Credit lists omit histories; the single-user endpoint returns the latest 100 actions. CORS exposes the cursor and accepts the guild header.
+
+## Validation and packaging
 
 ```sh
 npm run check
 npm test
+npm audit
 npm run benchmark
 npm run package
 ```
 
-Tests run offline with mocked Discord/database operations and cover command definitions, help permissions, empty-cache shipping, slow acknowledgement, birthday date boundaries, credit-update concurrency/replays, blocklist behavior, attachment bursts, and real Express routing/middleware without opening a network listener. The benchmark loads every command and processes 250 synthetic 8 MiB attachments while checking cache and RSS budgets. Its CPU time is workload cost, not a claim of meeting the CPU quota.
+The audit runs against all dependencies, including transitives; this release does not suppress advisories or use force-installed overrides. CI blocks publication on any reported vulnerability. The development watcher uses Node's built-in `--watch`, removing the nodemon dependency chain.
 
-Live Discord command execution, persisted MongoDB updates/indexes, server CPU throttling and long-running guild traffic must still be verified in staging with credentials and the target hosting limits. No production login, database mutation or deployment is performed by the offline checks.
+The tests cover command serialization, permissions, Discord components, multiple-server settings and data queries, copy migration, birthday deduplication, credit concurrency/replays, game engines/turns/expiry cleanup, reminders, API routing, blocklists and attachment bursts. External Discord/MongoDB operations are mocked. The synthetic benchmark loads every command and processes 250 8 MiB attachments; run it locally or in CI, not on the free host. It measures workload cost and observed RSS, not compliance with the host's sustained CPU policy.
+
+`npm run package` creates flat source and production-dependency ZIPs in `dist/`, plus a manifest and SHA256 checksums. It excludes `.env`, `.git`, caches and Git history, and refuses to package credentials in `config.json`. GitHub Actions tests, audits and publishes the ZIPs automatically for a new version on `main`. Live Discord permissions, MongoDB access/import, hosting quotas and sustained traffic still require validation on your server.

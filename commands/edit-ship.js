@@ -7,15 +7,15 @@
  *    written by the improved ship.js).
  */
 
-const { SlashCommandBuilder } = require("@discordjs/builders");
-const { Permissions } = require("discord.js");
+const { SlashCommandBuilder } = require("discord.js");
+const { PermissionsBitField } = require("discord.js");
 const shipSchema = require("../schemas/shipSchema");
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("edit-ship")
     .setDescription("Edit a ship's affinity score.")
-    .setDefaultMemberPermissions(Permissions.FLAGS.BAN_MEMBERS)
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.BanMembers)
     .addStringOption((opt) =>
       opt.setName("ship-name").setDescription("Ship name to edit (case-insensitive).").setRequired(true)
     )
@@ -33,7 +33,7 @@ module.exports = {
     const shipStr = interaction.options.getInteger("ship-str");
 
     try {
-      const ship = await shipSchema.findOne({ ShipName: name });
+      const ship = await shipSchema.findOne({ GuildID: interaction.guild.id, ShipName: name });
 
       if (!ship) {
         return interaction.reply({

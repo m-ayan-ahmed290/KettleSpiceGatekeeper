@@ -33,7 +33,7 @@ const legacyCreditSchema = require("../schemas/legacyCredits");
 
 const SECRET = process.env.BOT_API_SECRET;
 const PORT = parseInt(process.env.BOT_API_PORT || process.env.PORT || process.env.SERVER_PORT || "4000", 10);
-const GUILD_ID = process.env.GUILD_ID || require("../config.json").guildId; // same as config.json guildId
+const GUILD_ID = process.env.GUILD_ID || require("../presets/kettle.json").primaryGuildId; // same as config.json guildId
 
 // ─── Auth middleware ──────────────────────────────────────────────────────────
 
@@ -55,30 +55,43 @@ function createApiApp(client) {
     cors({
       origin: process.env.DASHBOARD_URL ?? "*",
       methods: ["GET", "POST", "PATCH", "DELETE"],
-      allowedHeaders: ["Content-Type", "x-bot-secret"],
+      allowedHeaders: ["Content-Type", "x-bot-secret", "x-guild-id"],
       exposedHeaders: ["X-Next-Cursor"],
     }),
   );
   app.disable("x-powered-by");
   app.get("/health", (req, res) => {
-    const ready = client.isReady() && require("mongoose").connection.readyState === 1;
+    const ready = client.isReady() && client.dataReady !== false && require("mongoose").connection.readyState === 1;
     res.status(ready ? 200 : 503).json({ ok: ready });
   });
   app.use(auth);
   app.use(express.json({ limit: "16kb" }));
+  app.use((req, res, next) => {
+    if (client.dataReady === false && !["/bot/stats", "/bot/guilds"].includes(req.path))
+      return res.status(503).json({ error: "Database initialization or legacy import is in progress" });
+    next();
+  });
+  app.get("/bot/guilds", (req, res) => res.json([...client.guilds.cache.values()].slice(0, 100).map(guild => ({ id: guild.id, name: guild.name }))));
+  // The API secret is an operator credential for all bot guilds. Scope every route explicitly.
+  app.use((req, res, next) => {
+    const id = req.headers["x-guild-id"] || req.query.guildId || GUILD_ID;
+    if (typeof id !== "string" || !/^\d{17,20}$/.test(id) || !client.guilds.cache.has(id))
+      return res.status(404).json({ error: "Choose a guild the bot belongs to, using x-guild-id or ?guildId=" });
+    req.guildId = id; next();
+  });
 
   // ── GET /bot/stats ─────────────────────────────────────────────────────────
   app.get("/bot/stats", (req, res) => {
-    const guild = client.guilds.cache.get(GUILD_ID);
+    const guild = client.guilds.cache.get(req.guildId);
     const mem = process.memoryUsage();
 
     res.json({
-      online: client.isReady(),
+      online: client.isReady() && client.dataReady !== false,
       resources: resourceStats(),
       uptime: client.uptime,
       ping: client.ws.ping,
       guildName: guild?.name ?? "Unknown",
-      guildIcon: guild?.iconURL({ dynamic: true }) ?? null,
+      guildIcon: guild?.iconURL({}) ?? null,
       memberCount: guild?.memberCount ?? 0,
       channelCount: guild?.channels.cache.size ?? 0,
       roleCount: guild?.roles.cache.size ?? 0,
@@ -90,11 +103,11 @@ function createApiApp(client) {
 
   // ── GET /bot/guild/channels ────────────────────────────────────────────────
   app.get("/bot/guild/channels", (req, res) => {
-    const guild = client.guilds.cache.get(GUILD_ID);
+    const guild = client.guilds.cache.get(req.guildId);
     if (!guild) return res.status(404).json({ error: "Guild not cached" });
 
     const channels = guild.channels.cache
-      .filter((c) => c.type === "GUILD_TEXT")
+      .filter((c) => c.type === 0)
       .map((c) => ({
         id: c.id,
         name: c.name,
@@ -107,7 +120,7 @@ function createApiApp(client) {
 
   // ── GET /bot/guild/roles ───────────────────────────────────────────────────
   app.get("/bot/guild/roles", (req, res) => {
-    const guild = client.guilds.cache.get(GUILD_ID);
+    const guild = client.guilds.cache.get(req.guildId);
     if (!guild) return res.status(404).json({ error: "Guild not cached" });
 
     const roles = guild.roles.cache
@@ -125,7 +138,7 @@ function createApiApp(client) {
 
   // ── GET /bot/guild/members ─────────────────────────────────────────────────
   app.get("/bot/guild/members", async (req, res) => {
-    const guild = client.guilds.cache.get(GUILD_ID);
+    const guild = client.guilds.cache.get(req.guildId);
     if (!guild) return res.status(404).json({ error: "Guild not cached" });
 
     const limit = parseLimit(req.query.limit, 100, 100);
@@ -139,7 +152,7 @@ function createApiApp(client) {
         .map((m) => ({
           id: m.user.id,
           username: m.user.tag,
-          avatar: m.user.displayAvatarURL({ dynamic: true }),
+          avatar: m.user.displayAvatarURL({}),
           nickname: m.nickname ?? null,
           roles: m.roles.cache
             .filter((r) => r.name !== "@everyone")
@@ -160,7 +173,7 @@ function createApiApp(client) {
     if (!/^\d{17,20}$/.test(userId || "") || !Number.isSafeInteger(durationMs) || durationMs <= 0 || durationMs > 28 * 86400_000)
       return res.status(400).json({ error: "userId and durationMs required" });
 
-    const guild = client.guilds.cache.get(GUILD_ID);
+    const guild = client.guilds.cache.get(req.guildId);
     try {
       const member = await guild.members.fetch(userId);
       await member.timeout(durationMs, reason ?? "Dashboard action");
@@ -175,7 +188,7 @@ function createApiApp(client) {
     const { userId } = req.body;
     if (typeof userId !== "string" || !/^\d{17,20}$/.test(userId)) return res.status(400).json({ error: "userId required" });
 
-    const guild = client.guilds.cache.get(GUILD_ID);
+    const guild = client.guilds.cache.get(req.guildId);
     try {
       const member = await guild.members.fetch(userId);
       await member.timeout(null, "Dashboard: timeout lifted");
@@ -189,7 +202,7 @@ function createApiApp(client) {
   app.post("/bot/roles/refresh", async (req, res) => {
     try {
       const { assignRolesToAllMembers } = require("../utilities/functions");
-      await assignRolesToAllMembers();
+      await assignRolesToAllMembers(client.guilds.cache.get(req.guildId));
       res.json({ ok: true });
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -221,7 +234,7 @@ function createApiApp(client) {
     try {
       const limit = parseLimit(req.query.limit, 50, 200);
       const users = await creditSchema
-        .find()
+        .find({ GuildID: req.guildId })
         .select("Username UserID Credits Blocked Reason")
         .sort({ Credits: -1 })
         .limit(limit)
@@ -238,7 +251,7 @@ function createApiApp(client) {
     try {
       const limit = parseLimit(req.query.limit, 50, 200);
       const users = await legacyCreditSchema
-        .find()
+        .find({ GuildID: req.guildId })
         .select("Username UserID Credits Blocked Reason")
         .sort({ Credits: -1 })
         .limit(limit)
@@ -256,7 +269,7 @@ function createApiApp(client) {
     try {
       const model =
         req.query.legacy === "true" ? legacyCreditSchema : creditSchema;
-      const user = await model.findOne({ UserID: req.params.userId }).slice("Action", -100).lean();
+      const user = await model.findOne({ GuildID: req.guildId, UserID: req.params.userId }).slice("Action", -100).lean();
       if (!user)
         return res
           .status(404)
@@ -279,8 +292,9 @@ function createApiApp(client) {
     }
 
     try {
-      const creditUser = await creditSchema.findOneAndUpdate({ UserID: userId }, [
+      const creditUser = await creditSchema.findOneAndUpdate({ GuildID: req.guildId, UserID: userId }, [
         { $set: {
+          GuildID: { $literal: req.guildId },
           UserID: { $literal: userId },
           Username: username ? { $literal: username } : { $ifNull: ["$Username", { $literal: userId }] },
           Credits: { $max: [0, { $add: [{ $ifNull: ["$Credits", 0] }, amount] }] },
@@ -303,7 +317,7 @@ function createApiApp(client) {
 
     try {
       const creditUser = await creditSchema.findOneAndUpdate(
-        { UserID: userId },
+        { GuildID: req.guildId, UserID: userId },
         { $set: { Blocked: true, Reason: reason ?? "Blocked via dashboard" } },
         { upsert: true, new: true },
       );
@@ -321,7 +335,7 @@ function createApiApp(client) {
 
     try {
       const creditUser = await creditSchema.findOneAndUpdate(
-        { UserID: userId },
+        { GuildID: req.guildId, UserID: userId },
         { $set: { Blocked: false, Reason: "" } },
         { new: true },
       );
