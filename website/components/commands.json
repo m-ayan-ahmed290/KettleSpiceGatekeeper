@@ -1,0 +1,311 @@
+[
+  {
+    "name": "birthday",
+    "description": "Set or remove your birthday.",
+    "category": "Community",
+    "admin": false,
+    "subcommands": []
+  },
+  {
+    "name": "block-words",
+    "description": "Manage the moderation word and phrase blocklist.",
+    "category": "Moderation",
+    "admin": true,
+    "subcommands": [
+      {
+        "name": "add",
+        "description": "Block a word or phrase."
+      },
+      {
+        "name": "remove",
+        "description": "Remove a word or phrase."
+      },
+      {
+        "name": "list",
+        "description": "List blocked words and phrases."
+      }
+    ]
+  },
+  {
+    "name": "credits",
+    "description": "Check credits for yourself or a moderator.",
+    "category": "Moderation",
+    "admin": true,
+    "subcommands": []
+  },
+  {
+    "name": "edit-ship",
+    "description": "Edit a ship's affinity score.",
+    "category": "Community",
+    "admin": true,
+    "subcommands": []
+  },
+  {
+    "name": "game",
+    "description": "Solo games, friendly challenges and cooperative adventures.",
+    "category": "Games",
+    "admin": false,
+    "subcommands": [
+      {
+        "name": "tictactoe",
+        "description": "Play against the bot, or challenge a server member."
+      },
+      {
+        "name": "connect-four",
+        "description": "Challenge someone to Connect Four."
+      },
+      {
+        "name": "guess",
+        "description": "Find a secret number in five guesses."
+      },
+      {
+        "name": "rps",
+        "description": "Play rock, paper, scissors against the bot."
+      },
+      {
+        "name": "dungeon",
+        "description": "Team up with a friend to defeat a boss. Share health and potions."
+      },
+      {
+        "name": "stats",
+        "description": "View game statistics in this server."
+      }
+    ]
+  },
+  {
+    "name": "help",
+    "description": "Browse commands available to you.",
+    "category": "Community",
+    "admin": false,
+    "subcommands": []
+  },
+  {
+    "name": "leaderboard",
+    "description": "Check leaderboard for various actions.",
+    "category": "Games",
+    "admin": true,
+    "subcommands": [
+      {
+        "name": "credits",
+        "description": "Check the credits leaderboard."
+      },
+      {
+        "name": "ships",
+        "description": "Check the ships leaderboard."
+      },
+      {
+        "name": "legacy-credits",
+        "description": "Check the archived (pre-rework) credits leaderboard."
+      }
+    ]
+  },
+  {
+    "name": "manage-mod",
+    "description": "Block/Unblock a moderator from gaining credits.",
+    "category": "Moderation",
+    "admin": true,
+    "subcommands": [
+      {
+        "name": "block",
+        "description": "Block a moderator from gaining credits."
+      },
+      {
+        "name": "unblock",
+        "description": "Unblock a moderator from their credit-block."
+      },
+      {
+        "name": "credits",
+        "description": "Manage the credits for a moderator."
+      }
+    ]
+  },
+  {
+    "name": "migration-review",
+    "description": "Review legacy duplicates preserved during the upgrade (read only).",
+    "category": "Setup",
+    "admin": true,
+    "subcommands": []
+  },
+  {
+    "name": "ping",
+    "description": "Check bot health: latency, uptime, memory usage.",
+    "category": "Setup",
+    "admin": false,
+    "subcommands": []
+  },
+  {
+    "name": "poll",
+    "description": "Create a multiple-choice reaction poll.",
+    "category": "Community",
+    "admin": true,
+    "subcommands": []
+  },
+  {
+    "name": "profile",
+    "description": "Manage your user profile",
+    "category": "Community",
+    "admin": false,
+    "subcommands": [
+      {
+        "name": "view",
+        "description": "View a user's profile"
+      },
+      {
+        "name": "edit",
+        "description": "Edit your profile settings"
+      },
+      {
+        "name": "delete",
+        "description": "Delete your profile"
+      }
+    ]
+  },
+  {
+    "name": "purge",
+    "description": "Delete recent messages, optionally from one person.",
+    "category": "Moderation",
+    "admin": true,
+    "subcommands": []
+  },
+  {
+    "name": "redeem",
+    "description": "Post game redeem code embeds with clickable buttons.",
+    "category": "Community",
+    "admin": true,
+    "subcommands": [
+      {
+        "name": "genshin-impact",
+        "description": "Redeem codes for Genshin Impact."
+      },
+      {
+        "name": "star-rail",
+        "description": "Redeem codes for Honkai: Star Rail."
+      },
+      {
+        "name": "zenless",
+        "description": "Redeem codes for Zenless Zone Zero."
+      }
+    ]
+  },
+  {
+    "name": "remind",
+    "description": "Manage personal reminders delivered by DM, even after a restart.",
+    "category": "Community",
+    "admin": false,
+    "subcommands": [
+      {
+        "name": "set",
+        "description": "Create a reminder (up to 10 pending per person)."
+      },
+      {
+        "name": "list",
+        "description": "List your reminders in this server, including failed deliveries."
+      },
+      {
+        "name": "cancel",
+        "description": "Cancel one of your reminders."
+      }
+    ]
+  },
+  {
+    "name": "roles-management",
+    "description": "Run role management scripts.",
+    "category": "Setup",
+    "admin": true,
+    "subcommands": [
+      {
+        "name": "refresh",
+        "description": "Re-assign tier auto-roles for every member based on their current subs."
+      },
+      {
+        "name": "assign",
+        "description": "Manually assign a role to a member."
+      }
+    ]
+  },
+  {
+    "name": "serverinfo",
+    "description": "Show this server's information without fetching all members.",
+    "category": "Setup",
+    "admin": false,
+    "subcommands": []
+  },
+  {
+    "name": "setup",
+    "description": "Configure this server without affecting any other server.",
+    "category": "Setup",
+    "admin": true,
+    "subcommands": [
+      {
+        "name": "view",
+        "description": "View this server\u2019s configuration."
+      },
+      {
+        "name": "channel",
+        "description": "Set a feature channel; omit channel to disable that destination."
+      },
+      {
+        "name": "toggle",
+        "description": "Enable or disable an automatic feature in this server."
+      },
+      {
+        "name": "role",
+        "description": "Map a subscription/source role to an automatic target role."
+      },
+      {
+        "name": "birthday-role",
+        "description": "Set a role for VIP or subscriber-only birthday eligibility."
+      },
+      {
+        "name": "birthday-public",
+        "description": "Allow all members to receive standard birthday announcements."
+      },
+      {
+        "name": "integration",
+        "description": "Configure trusted bot logs for moderator credits."
+      },
+      {
+        "name": "banner",
+        "description": "Set a redeem-code banner for this server."
+      },
+      {
+        "name": "preset",
+        "description": "Restore Kettle defaults, only in an original Kettle guild."
+      }
+    ]
+  },
+  {
+    "name": "ship",
+    "description": "Check compatibility between two people.",
+    "category": "Community",
+    "admin": false,
+    "subcommands": []
+  },
+  {
+    "name": "slowmode",
+    "description": "Set this channel's message delay; use 0 to disable.",
+    "category": "Moderation",
+    "admin": true,
+    "subcommands": []
+  },
+  {
+    "name": "warn",
+    "description": "Manage commission-spam offender records.",
+    "category": "Moderation",
+    "admin": true,
+    "subcommands": [
+      {
+        "name": "view",
+        "description": "View strike history for a user."
+      },
+      {
+        "name": "clear",
+        "description": "Clear all strikes for a user and lift their timeout."
+      },
+      {
+        "name": "list",
+        "description": "List top commission-spam offenders in this server."
+      }
+    ]
+  }
+]

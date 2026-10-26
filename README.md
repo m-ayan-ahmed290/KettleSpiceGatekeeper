@@ -7,6 +7,7 @@ A Discord bot for multiple servers: moderation, automatic roles, birthdays, mode
 - [Upload or Git deployment on Wispbyte](WISPBYTE.md)
 - [Game rules and commands](GAMES.md)
 - [Changes](CHANGELOG.md)
+- [Next.js bot website and ZIP deployment](website/README.md)
 
 ## Start
 

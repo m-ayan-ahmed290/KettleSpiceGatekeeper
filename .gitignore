@@ -6,3 +6,6 @@ dist/
 .npm/
 .env.*
 !.env.example
+.next/
+out/
+*.tsbuildinfo
