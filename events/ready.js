@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { initializeModels } = require('../utilities/database');
 const { EmbedBuilder } = require('discord.js');
 const Birthday = require('../schemas/birthdays');
 const { getGuildSettings, guildChannel } = require('../utilities/guildSettings');
@@ -12,6 +13,7 @@ module.exports = {
       const uri = process.env.MONGODB_URI || require('../config.json').mongoURL;
       if (!uri) throw new Error('Set MONGODB_URI to your existing MongoDB database');
       await mongoose.connect(uri, { maxPoolSize: 3, minPoolSize: 0, serverSelectionTimeoutMS: 10_000, socketTimeoutMS: 20_000 });
+      await initializeModels();
       await migrateLegacyData([...client.guilds.cache.keys()]);
       client.dataReady = true;
       await client.application.commands.set([...client.commands.values()].map(command => command.data.toJSON()));

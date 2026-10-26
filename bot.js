@@ -1,6 +1,5 @@
 require("dotenv").config();
-const mongoose = require("mongoose");
-mongoose.set("bufferCommands", false);
+const { mongoose } = require("./utilities/database");
 const fs   = require("fs");
 const path = require("path");
 const { Collection } = require("discord.js");

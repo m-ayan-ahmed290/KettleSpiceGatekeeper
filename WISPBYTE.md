@@ -1,4 +1,4 @@
-# Deploy Gatekeeper 3.0.1 on Wispbyte
+# Deploy Gatekeeper 3.0.2 on Wispbyte
 
 Your Node.js 24.22.1 runtime is suitable. Wispbyte's published free tier provides 35% of one vCPU, 512 MB RAM and 1,024 MB disk; keep MongoDB external.
 
@@ -7,7 +7,7 @@ Your Node.js 24.22.1 runtime is suitable. Wispbyte's published free tier provide
 The startup log `if [[ -d .git ]] && [[ 0 == "1" ]]; then git pull; fi` means **automatic Git pulling is disabled**. Linking a repository alone does not prove that the running files match GitHub.
 
 1. Stop the server and back up private configuration/database as described in [KETTLE_SETUP.md](KETTLE_SETUP.md).
-2. Sync/redeploy the linked repository to the latest `main`, or enable the panel's Git auto-update option if available. Verify `package.json` says **3.0.1** after updating.
+2. Sync/redeploy the linked repository to the latest `main`, or enable the panel's Git auto-update option if available. Verify `package.json` says **3.0.2** after updating.
 3. Refresh dependencies from the new lockfile: use `npm ci --omit=dev --ignore-scripts --no-audit --no-fund` if the panel supports shell/install commands. Otherwise remove the old `node_modules` folder in Files while stopped, then start; the startup command you posted installs dependencies only when that directory is absent. The release has no development dependency tree.
 4. Keep `DISCORD_TOKEN` and `MONGODB_URI` in Startup variables or `.env`. Preserve the existing URI/database. Set optional dashboard settings only if used.
 5. The panel may keep `index.js` as the startup file. **Both index.js and start.js now enforce the 256 MiB heap limit.** If editing the full command, use `node index.js` or `node start.js`.
@@ -49,4 +49,8 @@ Sources checked for the original deployment work:
 
 ## If 3.0.0 stopped on duplicate credits
 
-Update to **3.0.1** and restart with the same MongoDB URI. Leave `IMPORT_LEGACY_DATA` enabled; do not delete credit rows, drop indexes or reset the database to get past this error. The failed 3.0.0 import did not complete its marker, so the new importer resumes normally. Warnings are retained for `/migration-review`, while the bot can start. Existing guild records are not overwritten. See KETTLE_SETUP.md for the exact first-record policy and manual review steps.
+Update to **3.0.2** and restart with the same MongoDB URI. Leave `IMPORT_LEGACY_DATA` enabled; do not delete credit rows, drop indexes or reset the database to get past this error. The failed 3.0.0 import did not complete its marker, so the new importer resumes normally. Warnings are retained for `/migration-review`, while the bot can start. Existing guild records are not overwritten. See KETTLE_SETUP.md for the exact first-record policy and manual review steps.
+
+## Startup error: reading createCollection
+
+Update all source files to **3.0.2** and restart using `index.js`, keeping the same environment variables and database. This fixes model initialization before the MongoDB connection is ready. No database reset, dependency reinstall or environment change is needed for the 3.0.1 → 3.0.2 patch. The panel startup line `[[ 0 == "1" ]]` means Git auto-pull is disabled, so restarting alone does not download the fix; sync/redeploy the repository or upload the new release ZIP first.

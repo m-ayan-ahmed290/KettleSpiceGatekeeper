@@ -1,4 +1,4 @@
-# Gatekeeper Bot 3.0.1
+# Gatekeeper Bot 3.0.2
 
 A Discord bot for multiple servers: moderation, automatic roles, birthdays, moderator credits, profiles, reminders, redeem codes, polls and solo/cooperative games. It retains all 13 original commands and has 21 top-level commands, including the administrator-only `/setup` command.
 

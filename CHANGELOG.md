@@ -1,3 +1,9 @@
+# 3.0.2
+
+- Fix the `createCollection` startup crash by allowing preloaded Mongoose models to wait for the database connection.
+- Wait for model collections and unique indexes before migration; disable command buffering only after initialization finishes.
+- Add a regression test using real Mongoose models with an offline driver stub, including disconnected-query behavior.
+
 # 3.0.1
 
 - Fix startup failure when the legacy credit collection contains duplicate moderator identities.
