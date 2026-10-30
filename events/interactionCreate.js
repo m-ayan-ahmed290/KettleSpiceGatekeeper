@@ -14,6 +14,8 @@ module.exports = {
   once: false,
 
   async execute(interaction) {
+    if (interaction.isMessageComponent?.() && interaction.customId?.startsWith('game:'))
+      return require('../utilities/gameRuntime').handleGameInteraction(interaction);
     if (!interaction.isChatInputCommand()) return;
 
     const command = interaction.client.commands.get(interaction.commandName);
@@ -54,7 +56,9 @@ module.exports = {
       };
 
       try {
-        if (interaction.replied || interaction.deferred) {
+        if (interaction.deferred && !interaction.replied) {
+          await interaction.editReply({ content: errorPayload.content, components: [], embeds: [] });
+        } else if (interaction.replied) {
           await interaction.followUp(errorPayload);
         } else {
           await interaction.reply(errorPayload);

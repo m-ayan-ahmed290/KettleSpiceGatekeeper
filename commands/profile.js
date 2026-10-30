@@ -37,11 +37,11 @@ module.exports = {
 
     // Helper to build the profile embed
     function buildProfileEmbed(profile, user) {
-      const gamesPlayed = profile.TicTacToe.GamesPlayed || 0;
-      const gamesWon = profile.TicTacToe.GamesWon || 0;
-      const gamesLost = profile.TicTacToe.GamesLost || 0;
-      const gamesDrawn = profile.TicTacToe.GamesDrawn || 0;
-      const fastestWin = profile.TicTacToe.FastestWin ?? "N/A";
+      const gamesPlayed = profile.TicTacToe?.GamesPlayed || 0;
+      const gamesWon = profile.TicTacToe?.GamesWon || 0;
+      const gamesLost = profile.TicTacToe?.GamesLost || 0;
+      const gamesDrawn = profile.TicTacToe?.GamesDrawn || 0;
+      const fastestWin = profile.TicTacToe?.FastestWin ?? "N/A";
       const winRate =
         gamesPlayed > 0
           ? ((gamesWon / gamesPlayed) * 100).toFixed(2) + "%"
@@ -142,18 +142,21 @@ module.exports = {
 
       const msg = await interaction.fetchReply();
       const filter = (i) =>
-        i.customId === "confirm_delete_profile" &&
-        i.user.id === interaction.user.id;
+        i.customId === "confirm_delete_profile";
 
       const collector = msg.createMessageComponentCollector({
         filter,
         time: 30_000,
-        max: 1,
       });
 
+      let deleting = false;
       collector.on("collect", async (i) => {
         try {
+          if (i.user.id !== interaction.user.id) return await i.reply({ content: "Only the profile owner can confirm deletion.", ephemeral: true });
+          if (deleting) return await i.deferUpdate();
+          deleting = true;
           await i.deferUpdate();
+          collector.stop("confirmed");
           await Profile.findOneAndDelete(baseQuery);
           await i.editReply({ content: "Your profile has been deleted.", components: [] });
         } catch (error) {
@@ -162,8 +165,8 @@ module.exports = {
         }
       });
 
-      collector.on("end", (collected) => {
-        if (collected.size === 0) {
+      collector.on("end", (_, reason) => {
+        if (reason !== "confirmed") {
           interaction.editReply({
             content: "Profile deletion cancelled.",
             components: [],

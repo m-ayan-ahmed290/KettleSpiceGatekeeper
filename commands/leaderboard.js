@@ -284,8 +284,7 @@ module.exports = {
   setupNavigationCollector(message, data, type, originalInteraction, title) {
     const filter = (buttonInteraction) => {
       return (
-        buttonInteraction.customId.startsWith(type) &&
-        buttonInteraction.user.id === originalInteraction.user.id
+        buttonInteraction.customId.startsWith(`${type}_`)
       );
     };
 
@@ -296,6 +295,9 @@ module.exports = {
 
     collector.on("collect", async (buttonInteraction) => {
       try {
+        if (buttonInteraction.user.id !== originalInteraction.user.id)
+          return await buttonInteraction.reply({ content: "Only the person who opened this leaderboard can change its page.", ephemeral: true });
+        await buttonInteraction.deferUpdate();
         const [, action, currentPageStr] =
           buttonInteraction.customId.split("_");
         let currentPage = parseInt(currentPageStr);
@@ -307,7 +309,6 @@ module.exports = {
           currentPage++;
         } else {
           // Invalid action, just acknowledge
-          await buttonInteraction.deferUpdate();
           return;
         }
 
@@ -335,7 +336,7 @@ module.exports = {
           type,
         );
 
-        await buttonInteraction.update({
+        await buttonInteraction.editReply({
           embeds: [embed],
           components: components.length > 0 ? components : [],
         });

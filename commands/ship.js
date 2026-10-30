@@ -133,7 +133,7 @@ async function parseUserInput(input, interaction) {
   const match = input?.match(/^<@!?(\d+)>$/);
   if (match) {
     try {
-      const m = await interaction.guild.members.members.fetch(match[1]);
+      const m = await interaction.guild.members.fetch(match[1]);
       return m.displayName ?? m.user.username;
     } catch {
       try {

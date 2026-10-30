@@ -12,7 +12,7 @@ module.exports = {
     try {
       const uri = process.env.MONGODB_URI || require('../config.json').mongoURL;
       if (!uri) throw new Error('Set MONGODB_URI to your existing MongoDB database');
-      await mongoose.connect(uri, { maxPoolSize: 3, minPoolSize: 0, serverSelectionTimeoutMS: 10_000, socketTimeoutMS: 20_000 });
+      await mongoose.connect(uri, { maxPoolSize: 3, minPoolSize: 0, waitQueueTimeoutMS: 5_000, serverSelectionTimeoutMS: 10_000, socketTimeoutMS: 20_000 });
       await initializeModels();
       await migrateLegacyData([...client.guilds.cache.keys()]);
       client.dataReady = true;

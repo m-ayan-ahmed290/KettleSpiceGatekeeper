@@ -42,10 +42,12 @@ module.exports = {
     if (sub === "assign") {
       const targetUser = interaction.options.getUser("user");
       const role       = interaction.options.getRole("role");
+      if (role.managed || role.id === interaction.guild.id || role.guild.id !== interaction.guild.id)
+        return interaction.reply({ content: 'Choose a regular role from this server, not an integration role or @everyone.', ephemeral: true });
 
       let member;
       try {
-        member = await interaction.guild.members.members.fetch(targetUser.id);
+        member = await interaction.guild.members.fetch(targetUser.id);
       } catch {
         return interaction.reply({
           content: `${emojiForGuild(interaction.guild.id).failure} Could not find that member in this server.`,
@@ -73,9 +75,10 @@ module.exports = {
       await interaction.deferReply({ ephemeral: true });
 
       try {
-        await assignRolesToAllMembers(interaction.guild);
+        const result = await assignRolesToAllMembers(interaction.guild);
         return interaction.editReply({
-          content: `${emojiForGuild(interaction.guild.id).success} Successfully refreshed tier roles for all members.`,
+          content: result.skipped ? 'Automatic roles are disabled or have no rules. Configure them with /setup first.'
+            : `Role refresh finished: checked ${result.processed} members, assigned ${result.assigned}, removed ${result.removed}, failed ${result.failed}.` + (result.failed ? ' Check my permissions and role hierarchy for the failed updates.' : ''),
         });
       } catch (error) {
         console.error("[RolesManagement] Refresh failed:", error);

@@ -1,3 +1,13 @@
+# 3.0.3
+
+- Fix the race between an initial reply in flight and automatic command deferral; await acknowledgements before edits and complete unfinished deferred replies on errors.
+- Replace the indefinite thinking state with a visible status if an upstream operation is slow. Eventual results replace that status; database queries and pool waits have deadlines.
+- Replace game message collectors with unique session routing, immediate button acknowledgements, explicit consent/turn/spectator feedback, reliable expiry and failure cleanup. Add End game controls and `/game cancel`.
+- Distinguish a player already in a game/invitation from the global twenty-session limit.
+- Repair GuildMember fetch paths in manual role assignment, ship mention resolution and timeout lifting. Report role-refresh outcomes and timeout-lift failures accurately.
+- Repair acknowledgement/permission handling for profile deletion and leaderboard navigation.
+- Add dispatcher and real Discord.js serializer regressions for setup, migration review, reminders, game controls, profile confirmation and pagination. Keep existing guild data and migration behavior.
+
 # 3.0.2
 
 - Fix the `createCollection` startup crash by allowing preloaded Mongoose models to wait for the database connection.

@@ -20,11 +20,11 @@ module.exports = {
       if (!mappings.some(([source]) => source === review.Source)) continue;
       const source = mongoose.connection.collection(review.Source);
       let cursor;
-      if (review.Kind === 'duplicate') cursor = source.find(sourceIdentityQuery(review.Identity));
+      if (review.Kind === 'duplicate') cursor = source.find(sourceIdentityQuery(review.Identity), { maxTimeMS: 10_000 });
       else {
         const { ObjectId } = mongoose.Types;
         if (!ObjectId.isValid(review.FirstRecordId)) continue;
-        cursor = source.find({ _id: new ObjectId(review.FirstRecordId) });
+        cursor = source.find({ _id: new ObjectId(review.FirstRecordId) }, { maxTimeMS: 10_000 });
       }
       const candidates = await cursor.sort({ $natural: 1 }).limit(5).project({ _id: 1, Credits: 1, Blocked: 1, ShipStr: 1, Date: 1 }).toArray();
       sections.push(`**${review.Source}** · ${review.Kind} · ${review.RecordCount} original record(s)\nIdentity: ${Object.entries(review.Identity).filter(([key]) => key !== 'GuildID').map(([key, value]) => `${key}=${value}`).join(', ') || '(missing identifier)'}\nFirst source record: ${review.FirstRecordId}\n` +

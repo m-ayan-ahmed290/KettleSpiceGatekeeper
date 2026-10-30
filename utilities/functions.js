@@ -2,8 +2,9 @@ const { getGuildSettings, guildChannel } = require('./guildSettings');
 const roleJobs = new Map();
 function findRole(guild, reference) { return guild.roles.cache.get(reference) || guild.roles.cache.find(role => role.name === reference); }
 async function updateMemberRoles(member, remove = false) {
+  const summary = { assigned: 0, removed: 0, failed: 0 };
   const settings = await getGuildSettings(member.guild.id);
-  if (!settings.features.roles || member.user.bot) return;
+  if (!settings.features.roles || member.user.bot) return summary;
   for (const rule of settings.roles) {
     const target = findRole(member.guild, rule.target);
     if (!target) continue;
@@ -13,10 +14,13 @@ async function updateMemberRoles(member, remove = false) {
     try {
       if (qualifies) await member.roles.add(target, 'Automatic role rule');
       else await member.roles.remove(target, 'Automatic role rule');
+      summary[qualifies ? 'assigned' : 'removed']++;
       const channel = await guildChannel(member.guild, settings.channels.status);
-      if (channel) await channel.send({ content: `${qualifies ? '✅ Assigned' : '🗑️ Removed'} **${target.name}** ${qualifies ? 'to' : 'from'} ${member.user.tag}`, allowedMentions: { parse: [] } });
-    } catch (error) { console.warn(`[Roles:${member.guild.id}] ${error.message}`); }
+      if (channel) await channel.send({ content: `${qualifies ? '✅ Assigned' : '🗑️ Removed'} **${target.name}** ${qualifies ? 'to' : 'from'} ${member.user.tag}`, allowedMentions: { parse: [] } })
+        .catch(error => console.warn(`[Role log:${member.guild.id}] ${error.message}`));
+    } catch (error) { summary.failed++; console.warn(`[Roles:${member.guild.id}] ${error.message}`); }
   }
+  return summary;
 }
 async function* paginatedMembers(guild) {
   let after;
@@ -32,8 +36,14 @@ function assignRolesToAllMembers(guild) {
   if (roleJobs.has(guild.id)) return roleJobs.get(guild.id);
   const job = (async () => {
     const settings = await getGuildSettings(guild.id);
-    if (!settings.features.roles || !settings.roles.length) return;
-    for await (const member of paginatedMembers(guild)) await updateMemberRoles(member);
+    const summary = { processed: 0, assigned: 0, removed: 0, failed: 0, skipped: !settings.features.roles || !settings.roles.length };
+    if (summary.skipped) return summary;
+    for await (const member of paginatedMembers(guild)) {
+      const result = await updateMemberRoles(member);
+      summary.processed++;
+      for (const key of ['assigned', 'removed', 'failed']) summary[key] += result[key];
+    }
+    return summary;
   })().finally(() => roleJobs.delete(guild.id));
   roleJobs.set(guild.id, job); return job;
 }

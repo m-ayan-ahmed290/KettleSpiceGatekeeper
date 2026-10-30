@@ -11,8 +11,13 @@ All games run through `/game`. They use buttons or menus with no image generatio
 | `/game connect-four opponent:@Friend` | Versus | Drop tokens into seven columns; four matching tokens in any direction wins. Full columns cannot be selected. |
 | `/game dungeon partner:@Friend` | Co-op | Two players share health and two potions while taking turns against one boss. |
 | `/game stats user:@Friend` | Statistics | Per-game statistics for this server. Omit the user to see your own. |
+| `/game cancel` | Recovery | Cancel your current game or pending invitation in this server. Also available as Cancel/End game buttons. |
 
 Challenges require acceptance within 60 seconds and can be declined. Only the selected players can act, turns are enforced, and moves are serialized to prevent double-click races. A player has at most one active interactive game per server. There are at most 20 interactive games across the bot; games end after 90 seconds without a move or five minutes total. Timeouts free slots without awarding game results.
+
+The invited player presses **Accept** before play starts; the host cannot accept on their behalf. After acceptance, the host takes the first turn. Spectators, hosts waiting for acceptance, and players clicking out of turn receive a private explanation. Both participants are reserved during an invitation; this is a player conflict, not an indication that twenty other players are online. Use `/game cancel` to withdraw an invitation or end a match.
+
+Game controls use unique session IDs and are routed directly by the interaction handler. Stale buttons after expiry or a bot restart explain that a new game is needed. Failed sends/edits, declines, cancellation and expiry all release the participants. Acknowledgements happen before network edits or score writes.
 
 ## Dungeon strategy
 

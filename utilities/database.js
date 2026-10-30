@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 // Models are loaded before Discord is ready and before connect() is called.
 // Mongoose needs buffering here to defer collection/index creation until connect.
 mongoose.set('bufferCommands', true);
+mongoose.set('maxTimeMS', 10_000);
 
 async function initializeModels() {
   if (mongoose.connection.readyState !== 1) throw new Error('Connect MongoDB before initializing models');

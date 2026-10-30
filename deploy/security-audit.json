@@ -1,6 +1,6 @@
 {
-  "release": "3.0.2",
-  "checkedDate": "2026-10-26",
+  "release": "3.0.3",
+  "checkedDate": "2026-10-30",
   "scope": "All production and development dependencies; no advisories suppressed",
   "vulnerabilities": {
     "info": 0,

@@ -1,6 +1,6 @@
 {
   "name": "ktg-bot",
-  "version": "3.0.2",
+  "version": "3.0.3",
   "description": "Multi-server Discord moderation, community and game bot for small hosts",
   "main": "index.js",
   "scripts": {

@@ -106,19 +106,21 @@ async function handleClear(interaction) {
     });
   }
 
-  // Try to lift any active timeout
+  let timeoutResult = 'No active timeout was found.';
+  // Try to lift any active timeout, and report a failure honestly.
   try {
-    const member = await interaction.guild.members.members.fetch(user.id);
+    const member = await interaction.guild.members.fetch(user.id);
     if (member.communicationDisabledUntilTimestamp) {
       await member.timeout(null, `Timeout lifted by ${interaction.user.tag} via /warn clear`);
+      timeoutResult = 'The active timeout was lifted.';
     }
   } catch {
-    // Member may have left — not a fatal error
+    timeoutResult = 'I could not check or lift their timeout; check membership, my permissions and role hierarchy.';
   }
 
   return interaction.reply({
     content:
-      `✅ Cleared **${deleted.Strikes}** strike(s) for **${user.username}** and lifted any active timeout.`,
+      `✅ Cleared **${deleted.Strikes}** strike(s) for **${user.username}**. ${timeoutResult}`,
     ephemeral: true,
   });
 }
